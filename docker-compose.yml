@@ -1,0 +1,18 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persist SQLite DB and uploaded files on your VPS
+      - jolthost-data:/app/data
+      - jolthost-storage:/app/storage
+    environment:
+      - NODE_ENV=production
+      # Optional: max upload size in bytes (default 25MB). Example: 52428800 for 50MB
+      # - NUXT_JOLTHOST_UPLOAD_MAX_BYTES=26214400
+    restart: unless-stopped
+
+volumes:
+  jolthost-data:
+  jolthost-storage:
