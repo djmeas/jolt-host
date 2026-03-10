@@ -53,3 +53,27 @@ export function getViewAuthCookie(event: H3Event): string | undefined {
 export function isViewAuthorized(event: H3Event, slug: string): boolean {
   return verifyViewToken(slug, getViewAuthCookie(event))
 }
+
+const DEFAULT_UNLOCK_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000
+
+/** Creates a signed unlock token for a slug. Expires when the paste expires, or in 30 days if no expiration. */
+export function createUnlockToken(slug: string, expiresAt: string | null): string {
+  const expiry = expiresAt
+    ? String(new Date(expiresAt).getTime())
+    : String(Date.now() + DEFAULT_UNLOCK_EXPIRY_MS)
+  const sig = sign(slug, expiry)
+  return `${slug}:${expiry}:${sig}`
+}
+
+/** Validates an unlock token. Returns true if the token is valid and not expired. */
+export function validateUnlockToken(slug: string, tokenValue: string | undefined): boolean {
+  if (!tokenValue || typeof tokenValue !== 'string') return false
+  const parts = tokenValue.split(':')
+  if (parts.length !== 3) return false
+  const [tokenSlug, expiry, sig] = parts
+  if (tokenSlug !== slug) return false
+  if (Number(expiry) < Date.now()) return false
+  const expectedSig = sign(slug, expiry)
+  if (sig.length !== expectedSig.length) return false
+  return timingSafeEqual(Buffer.from(sig, 'utf8'), Buffer.from(expectedSig, 'utf8'))
+}

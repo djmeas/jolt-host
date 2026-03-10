@@ -1,6 +1,7 @@
-import { getRouterParam, setHeader, sendRedirect } from 'h3'
+import { getRouterParam, getQuery, setHeader, sendRedirect } from 'h3'
 import { findUploadBySlug } from '~/server/utils/db'
-import { isViewAuthorized } from '~/server/utils/view-auth'
+import { isViewAuthorized, setViewAuthCookie, validateUnlockToken } from '~/server/utils/view-auth'
+import { verifyPassword } from '~/server/utils/password'
 
 const UNLOCK_HTML = (slug: string, error?: string) => `<!DOCTYPE html>
 <html lang="en">
@@ -44,6 +45,17 @@ export default defineEventHandler((event) => {
     return sendRedirect(event, `/view/${slug}/`, 302)
   }
   if (isViewAuthorized(event, slug)) {
+    return sendRedirect(event, `/view/${slug}/`, 302)
+  }
+  const query = getQuery(event)
+  const unlockParam = typeof query.unlock === 'string' ? query.unlock : ''
+  const passwordParam = typeof query.password === 'string' ? query.password : ''
+  if (unlockParam && validateUnlockToken(slug, unlockParam)) {
+    setViewAuthCookie(event, slug)
+    return sendRedirect(event, `/view/${slug}/`, 302)
+  }
+  if (passwordParam && verifyPassword(passwordParam, row.password_hash)) {
+    setViewAuthCookie(event, slug)
     return sendRedirect(event, `/view/${slug}/`, 302)
   }
   setHeader(event, 'Content-Type', 'text/html; charset=utf-8')

@@ -1,9 +1,10 @@
-import { getRouterParam, setHeader, sendStream, sendRedirect } from 'h3'
+import { getRouterParam, getQuery, setHeader, sendStream, sendRedirect } from 'h3'
 import { join } from 'path'
 import { createReadStream, existsSync } from 'fs'
 import mime from 'mime-types'
 import { getStorageDir, findUploadBySlug } from '~/server/utils/db'
-import { isViewAuthorized } from '~/server/utils/view-auth'
+import { isViewAuthorized, setViewAuthCookie, validateUnlockToken } from '~/server/utils/view-auth'
+import { verifyPassword } from '~/server/utils/password'
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, 'slug')
@@ -19,6 +20,17 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: 'Paste has expired' })
   }
   if (row.password_hash && !isViewAuthorized(event, slug)) {
+    const query = getQuery(event)
+    const unlockParam = typeof query.unlock === 'string' ? query.unlock : ''
+    const passwordParam = typeof query.password === 'string' ? query.password : ''
+    if (unlockParam && validateUnlockToken(slug, unlockParam)) {
+      setViewAuthCookie(event, slug)
+      return sendRedirect(event, `/view/${slug}/`, 302)
+    }
+    if (passwordParam && verifyPassword(passwordParam, row.password_hash)) {
+      setViewAuthCookie(event, slug)
+      return sendRedirect(event, `/view/${slug}/`, 302)
+    }
     return sendRedirect(event, `/view/${slug}/unlock`, 302)
   }
 

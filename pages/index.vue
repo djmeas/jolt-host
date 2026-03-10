@@ -7,7 +7,7 @@ const error = ref<string | null>(null)
 const RESULT_STORAGE_KEY = 'jolthost-last-upload'
 const RESULT_BY_SLUG_PREFIX = 'jolthost-result-'
 
-type UploadResult = { url: string; slug: string; owner_token?: string }
+type UploadResult = { url: string; slug: string; owner_token?: string; url_with_unlock?: string }
 
 const expirationOptions = [
   { value: '', label: 'Never' },

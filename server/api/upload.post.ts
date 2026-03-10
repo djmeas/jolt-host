@@ -1,4 +1,4 @@
-import { readMultipartFormData } from 'h3'
+import { readMultipartFormData, getRequestIP, setResponseHeader } from 'h3'
 import { createWriteStream, mkdirSync, existsSync } from 'fs'
 import path from 'path'
 import { pipeline } from 'stream/promises'
@@ -8,6 +8,9 @@ import unzipper from 'unzipper'
 import { getStorageDir, insertUpload, slugExists } from '~/server/utils/db'
 import { generateUniqueSlug } from '~/server/utils/slug'
 import { hashPassword } from '~/server/utils/password'
+import { createUnlockToken } from '~/server/utils/view-auth'
+import { checkUploadRateLimit } from '~/server/utils/rate-limit'
+import { isAuthorizedToUpload } from '~/server/utils/upload-auth'
 
 const STORAGE = getStorageDir()
 
@@ -33,6 +36,28 @@ function pathRelativeToStorage(absolutePath: string): string {
 }
 
 export default defineEventHandler(async (event) => {
+  if (!isAuthorizedToUpload(event)) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: 'Unauthorized',
+      message: 'API token required for programmatic uploads. Use the web form at / or provide an API token in the Authorization header.',
+    })
+  }
+
+  const ip = getRequestIP(event) ?? 'unknown'
+  const { allowed, retryAfter } = checkUploadRateLimit(ip)
+  if (!allowed) {
+    const err = createError({
+      statusCode: 429,
+      statusMessage: 'Too Many Requests',
+      message: `Rate limit exceeded. Try again in ${retryAfter ?? 60} seconds.`,
+    })
+    if (retryAfter) {
+      setResponseHeader(event, 'Retry-After', String(retryAfter))
+    }
+    throw err
+  }
+
   const form = await readMultipartFormData(event)
   if (!form || form.length === 0) {
     throw createError({ statusCode: 400, message: 'No file in request' })
@@ -123,10 +148,17 @@ export default defineEventHandler(async (event) => {
   insertUpload(id, slug, entryPoint, passwordHash, ownerToken, expiresAt)
 
   const baseUrl = getRequestURL(event).origin
-  return {
+  const url = `${baseUrl}/view/${slug}`
+  const response: Record<string, string> = {
     slug,
-    url: `${baseUrl}/view/${slug}`,
+    url,
     entry_point: entryPoint,
     owner_token: ownerToken,
+    url_with_owner_token: `${url}?owner_token=${encodeURIComponent(ownerToken)}`,
   }
+  if (password.length > 0) {
+    const unlockToken = createUnlockToken(slug, expiresAt)
+    response.url_with_unlock = `${url}?unlock=${encodeURIComponent(unlockToken)}`
+  }
+  return response
 })

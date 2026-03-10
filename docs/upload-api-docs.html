@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload API – How to Use</title>
+  <style>
+    :root {
+      --bg: #0f0f12;
+      --surface: #1a1a22;
+      --text: #e4e4e7;
+      --muted: #a1a1aa;
+      --accent: #a78bfa;
+      --success: #22c55e;
+      --error: #f87171;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+      background: linear-gradient(145deg, var(--bg) 0%, var(--surface) 100%);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.5rem;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 1.1rem;
+      margin: 0 0 2rem;
+    }
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 2rem 0 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    h2:first-of-type { margin-top: 0; }
+    h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 1.5rem 0 0.5rem;
+      color: var(--muted);
+    }
+    p { margin: 0 0 1rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin: 1rem 0;
+    }
+    th, td {
+      padding: 0.6rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    th {
+      color: var(--muted);
+      font-weight: 500;
+    }
+    ul {
+      margin: 0 0 1rem;
+      padding-left: 1.5rem;
+    }
+    li { margin-bottom: 0.35rem; }
+    pre, code {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.875rem;
+    }
+    pre {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+    code {
+      background: rgba(255,255,255,0.06);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+    }
+    .endpoint {
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+    .badge-400 { background: rgba(248,113,113,0.2); color: var(--error); }
+    .badge-413 { background: rgba(251,191,36,0.2); color: #fbbf24; }
+    .badge-429 { background: rgba(251,191,36,0.2); color: #fbbf24; }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>How to Use the Upload Endpoint</h1>
+    <p class="subtitle">Upload static HTML files or ZIP archives to host them and get a shareable link.</p>
+
+    <h2>Endpoint</h2>
+    <pre><code><span class="endpoint">POST</span> /api/upload</code></pre>
+    <p><strong>Content-Type:</strong> <code>multipart/form-data</code></p>
+
+    <h2>Authentication</h2>
+    <p><strong>Anonymous uploads via the API are disabled.</strong> You must use one of:</p>
+    <ol>
+      <li><strong>Web form</strong> – Visit <code>/</code> in a browser to upload. A session cookie is set automatically.</li>
+      <li><strong>API token</strong> – Include the token in the <code>Authorization</code> header for programmatic uploads:</li>
+    </ol>
+    <pre><code>Authorization: Bearer jolt_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</code></pre>
+    <p>Tokens are created in the admin dashboard at <code>/admin</code>.</p>
+
+    <h2>Form Fields</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Type</th>
+          <th>Required</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>file</code></td>
+          <td>File</td>
+          <td>Yes</td>
+          <td>An <code>.html</code> file or <code>.zip</code> archive containing a static site</td>
+        </tr>
+        <tr>
+          <td><code>password</code></td>
+          <td>String</td>
+          <td>No</td>
+          <td>Password to protect the site (max 200 chars)</td>
+        </tr>
+        <tr>
+          <td><code>expiration</code></td>
+          <td>String</td>
+          <td>No</td>
+          <td>Auto-delete after: <code>1h</code>, <code>8h</code>, <code>24h</code>, <code>1w</code>, or <code>1d</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Limits</h2>
+    <ul>
+      <li><strong>File size:</strong> 25MB (configurable via <code>NUXT_JOLTHOST_UPLOAD_MAX_BYTES</code>)</li>
+      <li><strong>Rate limit:</strong> 25 uploads per IP per hour</li>
+      <li><strong>Accepted formats:</strong> <code>.html</code> or <code>.zip</code> only</li>
+      <li><strong>ZIP requirement:</strong> Must contain at least one <code>.html</code> file; <code>index.html</code> is used as entry point if present</li>
+    </ul>
+
+    <h2>Response</h2>
+    <p>Success (200):</p>
+    <pre><code>{
+  "slug": "quick-dragon-42",
+  "url": "https://your-host.com/view/quick-dragon-42",
+  "entry_point": "quick-dragon-42/index.html",
+  "owner_token": "abc123...",
+  "url_with_owner_token": "https://your-host.com/view/quick-dragon-42?owner_token=abc123...",
+  "url_with_unlock": "https://your-host.com/view/quick-dragon-42?unlock=TOKEN"
+}</code></pre>
+    <ul>
+      <li><strong>slug</strong> – Unique identifier for the site</li>
+      <li><strong>url</strong> – Public URL to view the site</li>
+      <li><strong>entry_point</strong> – Path to the main HTML file</li>
+      <li><strong>owner_token</strong> – Use to update password or expiration via <code>/api/paste/[slug]/password</code> and <code>/api/paste/[slug]/expiration</code></li>
+      <li><strong>url_with_owner_token</strong> – Full URL with owner token in query; convenient for bookmarking or passing to management APIs</li>
+      <li><strong>url_with_unlock</strong> – (when password provided) Shareable URL with a signed token; visiting it unlocks the page automatically. Token expires when the paste expires (or in 30 days if no expiration). The password is never shown in the URL.</li>
+    </ul>
+
+    <h2>Examples</h2>
+
+    <h3>cURL</h3>
+    <pre><code># Basic upload
+curl -X POST https://your-host.com/api/upload \
+  -F "file=@./index.html"
+
+# With password and expiration
+curl -X POST https://your-host.com/api/upload \
+  -F "file=@./site.zip" \
+  -F "password=my-secret" \
+  -F "expiration=24h"
+
+# With API token (add Authorization header)
+curl -X POST https://your-host.com/api/upload \
+  -H "Authorization: Bearer jolt_YOUR_TOKEN_HERE" \
+  -F "file=@./index.html"</code></pre>
+
+    <h3>JavaScript (fetch)</h3>
+    <pre><code>const formData = new FormData()
+formData.append('file', fileInput.files[0])
+formData.append('password', 'optional-password')
+formData.append('expiration', '1w')
+
+const headers = {}
+if (apiToken) {
+  headers['Authorization'] = `Bearer ${apiToken}`
+}
+
+const response = await fetch('https://your-host.com/api/upload', {
+  method: 'POST',
+  headers,
+  body: formData,
+})
+const result = await response.json()
+console.log(result.url)</code></pre>
+
+    <h3>Python (requests)</h3>
+    <pre><code>import requests
+
+api_token = 'jolt_YOUR_TOKEN_HERE'  # or None for anonymous upload
+headers = {}
+if api_token:
+    headers['Authorization'] = f'Bearer {api_token}'
+
+with open('index.html', 'rb') as f:
+    response = requests.post(
+        'https://your-host.com/api/upload',
+        headers=headers,
+        files={'file': ('index.html', f, 'text/html')},
+        data={'password': 'optional', 'expiration': '24h'},
+    )
+result = response.json()
+print(result['url'])</code></pre>
+
+    <h2>Error Responses</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Meaning</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-400">400</span></td>
+          <td>Missing file, invalid format, invalid expiration, or password too long</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-413">413</span></td>
+          <td>File exceeds size limit</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-429">429</span></td>
+          <td>Rate limit exceeded (check <code>Retry-After</code> header)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>API Tokens</h2>
+    <p>API tokens are created in the admin dashboard at <code>/admin</code>. To use a token, send it in the <code>Authorization</code> header:</p>
+    <pre><code>Authorization: Bearer jolt_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</code></pre>
+    <p>See the examples above for cURL, JavaScript, and Python usage.</p>
+  </div>
+</body>
+</html>
