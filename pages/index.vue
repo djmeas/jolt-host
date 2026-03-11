@@ -223,6 +223,10 @@ onUnmounted(() => {
         <button type="button" class="error-dismiss" aria-label="Dismiss" @click="error = null">×</button>
       </div>
     </div>
+
+    <p class="previewer-link-wrap" v-if="false">
+      <NuxtLink to="/previewer" class="previewer-link">Don't need to publish? Use the HTML previewer.</NuxtLink>
+    </p>
   </div>
 </template>
 
@@ -419,5 +423,17 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.35);
   color: #e4e4e7;
+}
+.previewer-link-wrap {
+  margin: 1.5rem 0 0;
+  text-align: center;
+}
+.previewer-link {
+  font-size: 0.9rem;
+  color: #a1a1aa;
+  text-decoration: none;
+}
+.previewer-link:hover {
+  color: #a78bfa;
 }
 </style>
