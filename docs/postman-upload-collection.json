@@ -1,0 +1,123 @@
+{
+  "info": {
+    "name": "Jolt Host - Upload API",
+    "description": "Test the upload endpoint for static HTML or ZIP files.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "apiToken",
+      "value": "jolt_YOUR_TOKEN_HERE"
+    }
+  ],
+  "item": [
+    {
+      "name": "Upload (basic)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{apiToken}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": []
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/upload",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "upload"]
+        },
+        "description": "Upload a single HTML file or ZIP archive. Requires API token in Authorization header."
+      }
+    },
+    {
+      "name": "Upload (with password)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{apiToken}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": []
+            },
+            {
+              "key": "password",
+              "value": "my-secret",
+              "type": "text",
+              "description": "Password to protect the site (max 200 chars)"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/upload",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "upload"]
+        },
+        "description": "Upload with password protection. Response includes url_with_unlock for a shareable link that auto-unlocks."
+      }
+    },
+    {
+      "name": "Upload (with password + expiration)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{apiToken}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": []
+            },
+            {
+              "key": "password",
+              "value": "my-secret",
+              "type": "text"
+            },
+            {
+              "key": "expiration",
+              "value": "24h",
+              "type": "text",
+              "description": "1h, 8h, 24h, 1d, or 1w"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/upload",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "upload"]
+        },
+        "description": "Upload with password and auto-delete after 24 hours."
+      }
+    }
+  ]
+}

@@ -6,7 +6,12 @@
     "build": "nuxt build",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
-    "preview": "nuxt preview"
+    "preview": "nuxt preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run server/",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:fixtures": "node scripts/build-test-fixtures.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^11.6.0",
@@ -15,7 +20,13 @@
     "unzipper": "^0.12.3"
   },
   "devDependencies": {
-    "@nuxt/devtools": "latest"
+    "@nuxt/devtools": "latest",
+    "@nuxt/test-utils": "^4.0.0",
+    "@vue/test-utils": "^2.4.6",
+    "archiver": "^7.0.1",
+    "happy-dom": "^20.8.3",
+    "nitro-test-utils": "^0.11.2",
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=18"
