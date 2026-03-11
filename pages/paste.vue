@@ -36,6 +36,20 @@ function getErrorMessage(e: unknown): string {
   return 'Failed to publish.'
 }
 
+function previewInNewTab() {
+  const raw = html.value.trim()
+  if (!raw) return
+  const lower = raw.toLowerCase()
+  const doc =
+    lower.startsWith('<!doctype') || lower.startsWith('<html')
+      ? raw
+      : `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${raw}</body></html>`
+  const blob = new Blob([doc], { type: 'text/html; charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const win = window.open(url, '_blank', 'noopener')
+  if (win) URL.revokeObjectURL(url)
+}
+
 const errorEl = ref<HTMLElement | null>(null)
 async function submitForm() {
   const content = html.value.trim()
@@ -81,6 +95,15 @@ async function submitForm() {
           :disabled="submitting"
         />
       </div>
+
+      <button
+        type="button"
+        class="preview-btn"
+        :disabled="!html.trim()"
+        @click="previewInNewTab"
+      >
+        Preview
+      </button>
 
       <div class="form-options">
         <div class="form-group">
@@ -229,6 +252,27 @@ async function submitForm() {
 }
 .form-input::placeholder {
   color: #71717a;
+}
+.preview-btn {
+  margin-top: 0.75rem;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #a1a1aa;
+  cursor: pointer;
+}
+.preview-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #e4e4e7;
+}
+.preview-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .submit-btn {
   margin-top: 1.25rem;
