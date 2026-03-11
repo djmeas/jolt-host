@@ -4,6 +4,8 @@ import type { H3Event } from 'h3'
 
 const COOKIE_NAME = 'jolt_view'
 const COOKIE_MAX_AGE_DAYS = 30
+const MAX_TOKENS_IN_COOKIE = 25
+const TOKEN_SEP = ';'
 const SECRET = process.env.JOLT_VIEW_SECRET || 'jolt-view-default-change-in-production'
 
 function getSigningKey(): Buffer {
@@ -34,8 +36,25 @@ export function verifyViewToken(slug: string, cookieValue: string | undefined): 
   return timingSafeEqual(Buffer.from(sig, 'utf8'), Buffer.from(expectedSig, 'utf8'))
 }
 
+/** Parse cookie value into individual tokens (handles legacy single-token format). */
+function getTokensFromCookie(cookieValue: string | undefined): string[] {
+  if (!cookieValue || typeof cookieValue !== 'string') return []
+  return cookieValue.split(TOKEN_SEP).map((t) => t.trim()).filter(Boolean)
+}
+
+/** Slug from a token string (format slug:expiry:sig). */
+function slugFromToken(token: string): string | null {
+  const idx = token.indexOf(':')
+  return idx > 0 ? token.slice(0, idx) : null
+}
+
 export function setViewAuthCookie(event: H3Event, slug: string): void {
-  const { value, expiry } = createViewToken(slug)
+  const current = getCookie(event, COOKIE_NAME)
+  const tokens = getTokensFromCookie(current)
+  const newToken = createViewToken(slug).value
+  const rest = tokens.filter((t) => slugFromToken(t) !== slug)
+  const combined = [newToken, ...rest].slice(0, MAX_TOKENS_IN_COOKIE)
+  const value = combined.join(TOKEN_SEP)
   const maxAge = COOKIE_MAX_AGE_DAYS * 24 * 60 * 60
   setCookie(event, COOKIE_NAME, value, {
     path: '/',
@@ -51,7 +70,9 @@ export function getViewAuthCookie(event: H3Event): string | undefined {
 }
 
 export function isViewAuthorized(event: H3Event, slug: string): boolean {
-  return verifyViewToken(slug, getViewAuthCookie(event))
+  const cookieValue = getViewAuthCookie(event)
+  const tokens = getTokensFromCookie(cookieValue)
+  return tokens.some((token) => verifyViewToken(slug, token))
 }
 
 const DEFAULT_UNLOCK_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000
