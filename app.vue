@@ -1,4 +1,6 @@
 <script setup lang="ts">
+const route = useRoute()
+const isPreviewer = computed(() => route.path === '/previewer')
 </script>
 
 <template>
@@ -6,7 +8,7 @@
     <header class="navbar">
       <NuxtLink to="/" class="navbar-brand">Jolt Host ⚡️</NuxtLink>
     </header>
-    <main class="main">
+    <main class="main" :class="{ 'main--full': isPreviewer }">
       <NuxtPage />
     </main>
   </div>
@@ -51,5 +53,11 @@ body {
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
+  min-height: 0;
+}
+.main--full {
+  padding: 0;
+  align-items: stretch;
+  justify-content: stretch;
 }
 </style>
