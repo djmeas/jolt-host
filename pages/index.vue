@@ -7,7 +7,7 @@ const error = ref<string | null>(null)
 const RESULT_STORAGE_KEY = 'jolthost-last-upload'
 const RESULT_BY_SLUG_PREFIX = 'jolthost-result-'
 
-type UploadResult = { url: string; slug: string; owner_token?: string }
+type UploadResult = { url: string; slug: string; owner_token?: string; url_with_unlock?: string }
 
 const expirationOptions = [
   { value: '', label: 'Never' },
@@ -171,9 +171,11 @@ onUnmounted(() => {
           </button>
         </template>
         <template v-else>
-          <span>Drag and drop an HTML file or ZIP here or click to choose</span>
+          <span>Click to upload an HTML file or ZIP</span>
         </template>
       </div>
+
+      <NuxtLink v-if="!selectedFile" to="/paste" class="paste-btn">Paste HTML</NuxtLink>
 
       <div class="form-options">
         <div class="form-group">
@@ -397,5 +399,25 @@ onUnmounted(() => {
 }
 .error-dismiss:hover {
   opacity: 1;
+}
+.paste-btn {
+  display: block;
+  margin-top: 0.75rem;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: center;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #a1a1aa;
+  text-decoration: none;
+  cursor: pointer;
+}
+.paste-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #e4e4e7;
 }
 </style>

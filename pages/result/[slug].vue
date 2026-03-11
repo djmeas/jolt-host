@@ -1,11 +1,22 @@
 <script setup lang="ts">
 const route = useRoute()
 const slug = computed(() => route.params.slug as string)
+const RESULT_BY_SLUG_PREFIX = 'jolthost-result-'
 
 const url = computed(() => {
   const s = slug.value
   if (!s) return ''
-  if (import.meta.client) return `${window.location.origin}/view/${s}`
+  if (import.meta.client) {
+    try {
+      const stored = sessionStorage.getItem(`${RESULT_BY_SLUG_PREFIX}${s}`)
+      if (stored) {
+        const parsed = JSON.parse(stored) as { url_with_unlock?: string; url?: string }
+        if (parsed.url_with_unlock) return parsed.url_with_unlock
+        if (parsed.url) return parsed.url
+      }
+    } catch (_) {}
+    return `${window.location.origin}/view/${s}`
+  }
   const req = useRequestURL()
   return `${req.origin}/view/${s}`
 })

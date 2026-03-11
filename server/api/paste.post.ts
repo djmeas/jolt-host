@@ -1,10 +1,7 @@
-import { readMultipartFormData, getRequestIP, setResponseHeader } from 'h3'
-import { createWriteStream, mkdirSync, existsSync } from 'fs'
+import { getRequestIP, setResponseHeader } from 'h3'
+import { writeFileSync, mkdirSync, existsSync } from 'fs'
 import path from 'path'
-import { pipeline } from 'stream/promises'
-import { Readable } from 'stream'
 import { randomUUID, randomBytes } from 'crypto'
-import unzipper from 'unzipper'
 import { getStorageDir, insertUpload, slugExists } from '~/server/utils/db'
 import { generateUniqueSlug } from '~/server/utils/slug'
 import { hashPassword } from '~/server/utils/password'
@@ -58,45 +55,32 @@ export default defineEventHandler(async (event) => {
     throw err
   }
 
-  const form = await readMultipartFormData(event)
-  if (!form || form.length === 0) {
-    throw createError({ statusCode: 400, message: 'No file in request' })
+  const body = await readBody<{ html?: string; expiration?: string; password?: string }>(event)
+  const html = typeof body?.html === 'string' ? body.html.trim() : ''
+  if (!html) {
+    throw createError({ statusCode: 400, message: 'HTML content is required' })
   }
 
-  const file = form.find((f) => f.name === 'file' || f.data)
-  if (!file?.data) {
-    throw createError({ statusCode: 400, message: 'Missing file' })
-  }
-
-  const passwordField = form.find((f) => f.name === 'password' && typeof f.data === 'object')
-  const passwordRaw = passwordField?.data
-  const password = passwordRaw && Buffer.isBuffer(passwordRaw) ? passwordRaw.toString('utf8').trim() : ''
+  const password = typeof body?.password === 'string' ? body.password.trim() : ''
   const passwordHash = password.length > 0 ? hashPassword(password) : null
   if (password.length > 0 && password.length > 200) {
     throw createError({ statusCode: 400, message: 'Password too long' })
   }
 
-  const expirationField = form.find((f) => f.name === 'expiration' && typeof f.data === 'object')
-  const expirationRaw = expirationField?.data
-  const expiration = expirationRaw && Buffer.isBuffer(expirationRaw) ? expirationRaw.toString('utf8').trim() : ''
+  const expiration = typeof body?.expiration === 'string' ? body.expiration.trim() : ''
   const expiresAt = parseExpirationToISO(expiration)
   if (expiration && !expiresAt) {
     throw createError({ statusCode: 400, message: 'Invalid expiration value' })
   }
 
-  const filename = (file.filename || 'file').toLowerCase()
   const config = useRuntimeConfig()
   const maxBytes = config.jolthost?.uploadMaxBytes ?? 25 * 1024 * 1024
-  const fileSize = Buffer.isBuffer(file.data) ? file.data.length : (file.data as Uint8Array).length
-  if (fileSize > maxBytes) {
+  const htmlBytes = Buffer.byteLength(html, 'utf8')
+  if (htmlBytes > maxBytes) {
     throw createError({
       statusCode: 413,
-      message: `File too large. Maximum size is ${Math.round(maxBytes / 1024 / 1024)}MB.`,
+      message: `Content too large. Maximum size is ${Math.round(maxBytes / 1024 / 1024)}MB.`,
     })
-  }
-
-  if (!filename.endsWith('.html') && !filename.endsWith('.zip')) {
-    throw createError({ statusCode: 400, message: 'Only .html or .zip files are allowed' })
   }
 
   const slug = generateUniqueSlug(slugExists)
@@ -108,42 +92,9 @@ export default defineEventHandler(async (event) => {
     mkdirSync(uploadDir, { recursive: true })
   }
 
-  let entryPoint: string
-
-  if (filename.endsWith('.html')) {
-    const outPath = path.join(uploadDir, 'index.html')
-    await pipeline(
-      Readable.from(file.data),
-      createWriteStream(outPath)
-    )
-    entryPoint = pathRelativeToStorage(outPath)
-  } else {
-    const buffer = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data as ArrayBuffer)
-    let directory: Awaited<ReturnType<typeof unzipper.Open.buffer>>
-    try {
-      directory = await unzipper.Open.buffer(buffer)
-    } catch (err) {
-      throw createError({
-        statusCode: 400,
-        message: 'Invalid or corrupted ZIP file.',
-      })
-    }
-    await directory.extract({ path: uploadDir })
-
-    const htmlEntries = directory.files
-      .filter((e) => e.type !== 'Directory' && e.path.toLowerCase().endsWith('.html'))
-      .map((e) => e.path.replace(/\\/g, '/').replace(/^\/+/, ''))
-      .sort((a, b) => {
-        if (a.toLowerCase() === 'index.html') return -1
-        if (b.toLowerCase() === 'index.html') return 1
-        return a.localeCompare(b)
-      })
-    const entryFile = htmlEntries[0]
-    if (!entryFile) {
-      throw createError({ statusCode: 400, message: 'ZIP must contain at least one .html file' })
-    }
-    entryPoint = pathRelativeToStorage(path.join(uploadDir, entryFile))
-  }
+  const outPath = path.join(uploadDir, 'index.html')
+  writeFileSync(outPath, html, 'utf8')
+  const entryPoint = pathRelativeToStorage(outPath)
 
   insertUpload(id, slug, entryPoint, passwordHash, ownerToken, expiresAt)
 

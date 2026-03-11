@@ -1,15 +1,19 @@
 import Database from 'better-sqlite3'
-import { join } from 'path'
+import { join, dirname } from 'path'
 import { mkdirSync, existsSync } from 'fs'
 
-const STORAGE_DIR = join(process.cwd(), 'storage')
-const DB_PATH = join(process.cwd(), 'data', 'jolt.db')
+const STORAGE_DIR = process.env.NODE_ENV === 'test'
+  ? join(process.cwd(), 'test', 'tmp-storage')
+  : join(process.cwd(), 'storage')
+const DB_PATH = process.env.NODE_ENV === 'test'
+  ? join(process.cwd(), 'test', 'tmp-data', 'jolt.db')
+  : join(process.cwd(), 'data', 'jolt.db')
 
 let db: ReturnType<typeof Database> | null = null
 
 function getDb(): Database.Database {
   if (!db) {
-    const dir = join(process.cwd(), 'data')
+    const dir = dirname(DB_PATH)
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
     db = new Database(DB_PATH)
     db.exec(`
@@ -35,6 +39,15 @@ function getDb(): Database.Database {
     if (!hasExpiresAt) {
       db.exec(`ALTER TABLE uploads ADD COLUMN expires_at TEXT`)
     }
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS api_tokens (
+        id TEXT PRIMARY KEY,
+        nickname TEXT UNIQUE NOT NULL,
+        token_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_api_tokens_nickname ON api_tokens(nickname);
+    `)
   }
   return db
 }
@@ -103,4 +116,140 @@ export function deleteUploadBySlug(slug: string): boolean {
 
 export function slugExists(slug: string): boolean {
   return findUploadBySlug(slug) !== undefined
+}
+
+export type UploadListItem = {
+  id: string
+  slug: string
+  entry_point: string
+  created_at: string
+  expires_at: string | null
+  has_password: boolean
+}
+
+export function getAllUploads(): UploadListItem[] {
+  const database = getDb()
+  const rows = database
+    .prepare(
+      `SELECT id, slug, entry_point, created_at, expires_at,
+        CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END as has_password
+       FROM uploads ORDER BY created_at DESC`
+    )
+    .all() as (UploadRow & { has_password: number })[]
+  return rows.map((r) => ({
+    id: r.id,
+    slug: r.slug,
+    entry_point: r.entry_point,
+    created_at: r.created_at,
+    expires_at: r.expires_at,
+    has_password: r.has_password === 1,
+  }))
+}
+
+export type UploadsFilter = {
+  dateFrom?: string // ISO date
+  dateTo?: string // ISO date
+  hasPassword?: boolean // true = protected only, false = unprotected only, undefined = all
+  page?: number
+  limit?: number
+}
+
+export function getUploadsPaginated(filter: UploadsFilter = {}): {
+  items: UploadListItem[]
+  total: number
+  page: number
+  limit: number
+} {
+  const database = getDb()
+  const page = Math.max(1, filter.page ?? 1)
+  const limit = Math.min(100, Math.max(1, filter.limit ?? 20))
+  const offset = (page - 1) * limit
+
+  const conditions: string[] = []
+  const params: (string | number)[] = []
+
+  if (filter.dateFrom) {
+    conditions.push('date(created_at) >= date(?)')
+    params.push(filter.dateFrom)
+  }
+  if (filter.dateTo) {
+    conditions.push('date(created_at) <= date(?)')
+    params.push(filter.dateTo)
+  }
+  if (filter.hasPassword === true) {
+    conditions.push('password_hash IS NOT NULL')
+  } else if (filter.hasPassword === false) {
+    conditions.push('password_hash IS NULL')
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+  const countRow = database
+    .prepare(`SELECT COUNT(*) as n FROM uploads ${whereClause}`)
+    .get(...params) as { n: number }
+  const total = countRow.n
+
+  const rows = database
+    .prepare(
+      `SELECT id, slug, entry_point, created_at, expires_at,
+        CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END as has_password
+       FROM uploads ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`
+    )
+    .all(...params, limit, offset) as (UploadRow & { has_password: number })[]
+
+  const items = rows.map((r) => ({
+    id: r.id,
+    slug: r.slug,
+    entry_point: r.entry_point,
+    created_at: r.created_at,
+    expires_at: r.expires_at,
+    has_password: r.has_password === 1,
+  }))
+
+  return { items, total, page, limit }
+}
+
+export function updatePasswordBySlug(slug: string, passwordHash: string | null): boolean {
+  const database = getDb()
+  const info = database.prepare('UPDATE uploads SET password_hash = ? WHERE slug = ?').run(passwordHash, slug)
+  return info.changes === 1
+}
+
+// API tokens
+export type ApiTokenRow = { id: string; nickname: string; token_hash: string; created_at: string }
+
+export function insertApiToken(id: string, nickname: string, tokenHash: string): void {
+  const database = getDb()
+  database.prepare(
+    'INSERT INTO api_tokens (id, nickname, token_hash, created_at) VALUES (?, ?, ?, datetime(\'now\'))'
+  ).run(id, nickname, tokenHash)
+}
+
+export function findApiTokenByNickname(nickname: string): ApiTokenRow | undefined {
+  const database = getDb()
+  return database.prepare(
+    'SELECT id, nickname, token_hash, created_at FROM api_tokens WHERE nickname = ?'
+  ).get(nickname) as ApiTokenRow | undefined
+}
+
+export function getAllApiTokens(): { id: string; nickname: string; created_at: string }[] {
+  const database = getDb()
+  const rows = database.prepare(
+    'SELECT id, nickname, created_at FROM api_tokens ORDER BY created_at DESC'
+  ).all() as ApiTokenRow[]
+  return rows.map((r) => ({ id: r.id, nickname: r.nickname, created_at: r.created_at }))
+}
+
+export function deleteApiTokenByNickname(nickname: string): boolean {
+  const database = getDb()
+  const info = database.prepare('DELETE FROM api_tokens WHERE nickname = ?').run(nickname)
+  return info.changes === 1
+}
+
+export function findApiTokenByHash(tokenHash: string): ApiTokenRow | undefined {
+  const database = getDb()
+  return database.prepare(
+    'SELECT id, nickname, token_hash, created_at FROM api_tokens WHERE token_hash = ?'
+  ).get(tokenHash) as ApiTokenRow | undefined
 }
