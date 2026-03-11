@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
     const passwordParam = typeof query.password === 'string' ? query.password : ''
     if (unlockParam && validateUnlockToken(slug, unlockParam)) {
       setViewAuthCookie(event, slug)
-      return sendRedirect(event, `/view/${slug}/`, 302)
+      return sendRedirect(event, `/view/${slug}/?unlock=${encodeURIComponent(unlockParam)}`, 302)
     }
     if (passwordParam && verifyPassword(passwordParam, row.password_hash)) {
       setViewAuthCookie(event, slug)
