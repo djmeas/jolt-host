@@ -1,5 +1,6 @@
 const DEFAULT_UPLOAD_MAX_BYTES = 100 * 1024 * 1024 // 100MB
 
+// Nitro options are supported at runtime but omitted from NuxtConfig in @nuxt/schema (nitro?: never)
 export default defineNuxtConfig({
   compatibilityDate: '2025-02-18',
   devtools: { enabled: true },
@@ -11,6 +12,7 @@ export default defineNuxtConfig({
       adminPassword: '',
     },
   },
+  // @ts-expect-error - nitro is valid at runtime; schema types omit it (Nuxt 4 compat)
   nitro: {
     preset: 'cloudflare-pages',
     output: { dir: '.output' },

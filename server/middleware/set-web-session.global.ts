@@ -7,7 +7,7 @@ import { setWebSessionCookie } from '~/server/utils/web-session'
 export default defineEventHandler((event) => {
   const path = getRequestURL(event).pathname
   if (event.method !== 'GET') return
-  if (path === '/' || path.startsWith('/result')) {
+  if (path === '/' || path === '/paste' || path.startsWith('/result')) {
     setWebSessionCookie(event)
   }
 })
