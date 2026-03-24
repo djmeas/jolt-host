@@ -141,13 +141,13 @@ onHoverEnd.value = () => {
 }
 
 onSelect.value = (payload: SelectPayload) => {
-  startEditing(payload.path, payload.text, payload.tagName, payload.rect)
+  startEditing(payload.path, payload.html, payload.tagName, payload.rect)
 }
 
-function startEditing(path: string, text: string, _tagName: string, rect: { top: number; left: number; width: number; height: number }) {
+function startEditing(path: string, html: string, _tagName: string, rect: { top: number; left: number; width: number; height: number }) {
   editingPath.value = path
-  editingOriginalText.value = text
-  editText.value = text
+  editingOriginalText.value = html
+  editText.value = html
   positionPopover(rect)
   popoverState.value = 'editing'
 }
@@ -169,7 +169,7 @@ function cancelEdit() {
 function clickEdit() {
   if (!hoveredInfo.value) return
   const h = hoveredInfo.value
-  startEditing(h.path, h.text, h.tagName, h.rect)
+  startEditing(h.path, h.html, h.tagName, h.rect)
 }
 
 // ── Export phase state ───────────────────────────────────────────────
@@ -311,10 +311,11 @@ function backToEditor() {
         class="popover popover-editing"
         :style="{ left: popoverX + 'px', top: popoverY + 'px' }"
       >
+        <div class="popover-html-label">HTML</div>
         <textarea
           v-model="editText"
           class="popover-textarea"
-          rows="3"
+          rows="5"
           @keydown.enter.ctrl="saveEdit"
           @keydown.escape="cancelEdit"
         />
@@ -657,7 +658,15 @@ function backToEditor() {
 .popover-editing {
   flex-direction: column;
   padding: 0.6rem;
-  min-width: 260px;
+  min-width: 320px;
+}
+.popover-html-label {
+  font-size: 0.7rem;
+  font-family: ui-monospace, monospace;
+  color: #71717a;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
 }
 .popover-textarea {
   width: 100%;
@@ -668,7 +677,7 @@ function backToEditor() {
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 6px;
   color: #e4e4e7;
-  resize: vertical;
+  resize: both;
   min-height: 3rem;
 }
 .popover-textarea:focus {

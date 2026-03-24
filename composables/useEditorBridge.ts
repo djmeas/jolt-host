@@ -11,14 +11,14 @@
 
 export interface HoverPayload {
   path: string
-  text: string
+  html: string
   tagName: string
   rect: { top: number; left: number; width: number; height: number }
 }
 
 export interface SelectPayload {
   path: string
-  text: string
+  html: string
   tagName: string
   rect: { top: number; left: number; width: number; height: number }
 }
@@ -69,23 +69,22 @@ export function getEditorBridgeHtml(): string {
     return parts.join(' > ');
   }
 
-  // Check if an element is a leaf text element:
-  // all childNodes are TEXT_NODE and textContent is non-empty
-  function isLeafText(el) {
-    if (!el || !el.childNodes || el.childNodes.length === 0) return false;
+  // Check if an element is a valid hover target:
+  // has non-empty textContent and is not a structural/meta tag
+  var SKIP_TAGS = { HTML: 1, BODY: 1, HEAD: 1, SCRIPT: 1, STYLE: 1, META: 1, LINK: 1, NOSCRIPT: 1, TEMPLATE: 1 };
+  function hasText(el) {
+    if (!el || !el.tagName) return false;
+    if (SKIP_TAGS[el.tagName]) return false;
     if (el.hasAttribute && el.hasAttribute('data-jolt-editor')) return false;
-    for (var i = 0; i < el.childNodes.length; i++) {
-      if (el.childNodes[i].nodeType !== 3) return false; // 3 = TEXT_NODE
-    }
     return el.textContent.trim().length > 0;
   }
 
-  // Find the deepest leaf-text element at coordinates
-  function findLeafTextAt(x, y) {
+  // Find the deepest text-containing element at coordinates
+  function findTextElemAt(x, y) {
     var els = document.elementsFromPoint(x, y);
     for (var i = 0; i < els.length; i++) {
       if (els[i].hasAttribute && els[i].hasAttribute('data-jolt-editor')) continue;
-      if (isLeafText(els[i])) return els[i];
+      if (hasText(els[i])) return els[i];
     }
     return null;
   }
@@ -93,7 +92,7 @@ export function getEditorBridgeHtml(): string {
   var currentHover = null;
 
   document.addEventListener('mousemove', function(e) {
-    var el = findLeafTextAt(e.clientX, e.clientY);
+    var el = findTextElemAt(e.clientX, e.clientY);
     if (el === currentHover) return;
 
     // Remove old highlight
@@ -111,7 +110,7 @@ export function getEditorBridgeHtml(): string {
       type: 'jolt-editor-hover',
       payload: {
         path: cssPath(el),
-        text: el.textContent,
+        html: el.innerHTML,
         tagName: el.tagName.toLowerCase(),
         rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
       }
@@ -119,7 +118,7 @@ export function getEditorBridgeHtml(): string {
   }, { passive: true });
 
   document.addEventListener('click', function(e) {
-    var el = findLeafTextAt(e.clientX, e.clientY);
+    var el = findTextElemAt(e.clientX, e.clientY);
     if (!el) return;
     e.preventDefault();
     e.stopPropagation();
@@ -128,7 +127,7 @@ export function getEditorBridgeHtml(): string {
       type: 'jolt-editor-select',
       payload: {
         path: cssPath(el),
-        text: el.textContent,
+        html: el.innerHTML,
         tagName: el.tagName.toLowerCase(),
         rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
       }
@@ -150,7 +149,7 @@ export function getEditorBridgeHtml(): string {
 
     if (data.type === 'jolt-editor-update') {
       var target = document.querySelector(data.path);
-      if (target) target.textContent = data.newText;
+      if (target) target.innerHTML = data.newHtml;
     }
 
     if (data.type === 'jolt-editor-serialize') {
@@ -198,9 +197,9 @@ export function useEditorBridge() {
     }
   }
 
-  function sendUpdate(path: string, newText: string) {
+  function sendUpdate(path: string, newHtml: string) {
     iframeRef.value?.contentWindow?.postMessage(
-      { type: 'jolt-editor-update', path, newText },
+      { type: 'jolt-editor-update', path, newHtml },
       '*',
     )
   }
