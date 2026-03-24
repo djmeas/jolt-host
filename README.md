@@ -24,6 +24,14 @@ For the **admin dashboard** at `/admin`, set an admin password (see [Environment
 - **Two ways to publish**
   - **Upload** — `.html` or `.zip` via drag-and-drop or file picker at `/`, or via `POST /api/upload`
   - **Paste** — raw HTML at `/paste` or via `POST /api/paste` (writes a single `index.html`)
+- **HTML Text Editor** — visual text editor at `/editor`
+  - Upload an `.html` file or paste raw HTML
+  - Preview the rendered page in an interactive iframe
+  - Hover over any text element to see a popover with an "Edit" action
+  - Click to edit text inline, then save changes live in the preview
+  - Click "Generate HTML" to produce clean output with all edits applied
+  - Copy the result to clipboard or download as `index.html`
+  - Entirely client-side — nothing is published or saved to the server
 - **Short slugs** (e.g. `quick-apple-42`) for URLs like `yoursite.com/view/quick-apple-42`
 - **Static serving** — `/view/[slug]` serves the entry `index.html`; `/view/[slug]/**` serves assets (CSS, JS, images) with correct `Content-Type`
 - **Password protection** — optional password per paste; visitors see an unlock page; you get a shareable **unlock URL** (`?unlock=TOKEN`) so they can view without typing the password

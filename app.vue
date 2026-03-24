@@ -1,14 +1,41 @@
 <script setup lang="ts">
+import { joinURL } from 'ufo'
+
 const route = useRoute()
-const isPreviewer = computed(() => route.path === '/previewer')
+const isFullWidth = computed(() => ['/previewer', '/editor'].includes(route.path))
+const runtimeConfig = useRuntimeConfig()
+const logoUrl = computed(() => joinURL(runtimeConfig.app.baseURL, 'JoltSlashLogo.png'))
+
+useHead({
+  link: [
+    { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+    { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
+    {
+      rel: 'stylesheet',
+      href: 'https://fonts.googleapis.com/css2?family=Bungee&family=Contrail+One&display=swap',
+    },
+  ],
+})
 </script>
 
 <template>
+  <Notivue v-slot="item">
+    <Notification :item="item" />
+  </Notivue>
   <div class="app">
     <header class="navbar">
-      <NuxtLink to="/" class="navbar-brand">Jolt Host ⚡️</NuxtLink>
+      <NuxtLink to="/" class="navbar-brand" aria-label="Jolt Host home">
+        <!-- <img
+          class="navbar-logo"
+          :src="logoUrl"
+          alt="Jolt Host"
+          width="160"
+          height="42"
+        /> -->
+        <span class="navbar-host">&lt;jolt⚡&gt; HOST</span>
+      </NuxtLink>
     </header>
-    <main class="main" :class="{ 'main--full': isPreviewer }">
+    <main class="main" :class="{ 'main--full': isFullWidth }">
       <NuxtPage />
     </main>
   </div>
@@ -34,17 +61,34 @@ body {
   padding: 0.75rem 1.5rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.2);
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .navbar-brand {
-  font-size: 1.25rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   color: #e4e4e7;
   text-decoration: none;
 }
 .navbar-brand:hover {
   color: #a78bfa;
+}
+.navbar-logo {
+  display: block;
+  height: 32px;
+  width: auto;
+  filter: drop-shadow(0 2px 12px rgba(0, 0, 0, 0.35));
+}
+.navbar-host {
+  font-family: "Contrail One", sans-serif;
+  font-weight: 200;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  font-size: 18px;
 }
 .main {
   flex: 1;
