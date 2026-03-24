@@ -176,6 +176,7 @@ onUnmounted(() => {
       </div>
 
       <NuxtLink v-if="!selectedFile" to="/paste" class="paste-btn">Paste HTML</NuxtLink>
+      <NuxtLink v-if="!selectedFile" to="/editor" class="paste-btn">Edit HTML</NuxtLink>
 
       <div class="form-options">
         <div class="form-group">
