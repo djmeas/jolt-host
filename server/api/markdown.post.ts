@@ -2,13 +2,14 @@ import { setResponseHeader } from 'h3'
 import { writeFileSync, mkdirSync, existsSync } from 'fs'
 import path from 'path'
 import { randomUUID, randomBytes } from 'crypto'
-import { getStorageDir, insertUpload, slugExists } from '~/server/utils/db'
+import { getStorageDir, insertUpload, slugExists, findUserById } from '~/server/utils/db'
 import { generateUniqueSlug } from '~/server/utils/slug'
 import { hashPassword } from '~/server/utils/password'
 import { createUnlockToken } from '~/server/utils/view-auth'
 import { checkUploadRateLimit, getClientIP } from '~/server/utils/rate-limit'
 import { isAuthorizedToUpload, hasValidApiToken } from '~/server/utils/upload-auth'
 import { verifyTurnstileToken } from '~/server/utils/turnstile'
+import { getUserIdFromEvent } from '~/server/utils/user-auth'
 
 const STORAGE = getStorageDir()
 
@@ -76,9 +77,15 @@ export default defineEventHandler(async (event) => {
   }
 
   const expiration = typeof body?.expiration === 'string' ? body.expiration.trim() : ''
-  const expiresAt = parseExpirationToISO(expiration)
+  let expiresAt = parseExpirationToISO(expiration)
   if (expiration && !expiresAt) {
     throw createError({ statusCode: 400, message: 'Invalid expiration value' })
+  }
+
+  const userId = getUserIdFromEvent(event) ?? null
+  const user = userId ? findUserById(userId) : null
+  if (user && user.never_expire === 1) {
+    expiresAt = null
   }
 
   const config = useRuntimeConfig()
@@ -104,7 +111,7 @@ export default defineEventHandler(async (event) => {
   writeFileSync(outPath, markdown, 'utf8')
   const entryPoint = pathRelativeToStorage(outPath)
 
-  insertUpload(id, slug, entryPoint, passwordHash, ownerToken, expiresAt)
+  insertUpload(id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId)
 
   const baseUrl = getRequestURL(event).origin
   const url = `${baseUrl}/view/${slug}`

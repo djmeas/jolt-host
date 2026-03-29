@@ -3,6 +3,7 @@ import type { H3Event } from 'h3'
 import { hashApiToken } from '~/server/utils/api-token'
 import { findApiTokenByHash } from '~/server/utils/db'
 import { hasValidWebSession } from '~/server/utils/web-session'
+import { getUserIdFromEvent } from '~/server/utils/user-auth'
 
 export function hasValidApiToken(event: H3Event): boolean {
   const auth = getRequestHeader(event, 'authorization')
@@ -16,5 +17,6 @@ export function hasValidApiToken(event: H3Event): boolean {
 }
 
 export function isAuthorizedToUpload(event: H3Event): boolean {
+  if (getUserIdFromEvent(event) !== null) return true
   return hasValidApiToken(event) || hasValidWebSession(event)
 }

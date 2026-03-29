@@ -5,13 +5,14 @@ import { pipeline } from 'stream/promises'
 import { Readable } from 'stream'
 import { randomUUID, randomBytes } from 'crypto'
 import unzipper from 'unzipper'
-import { getStorageDir, insertUpload, slugExists } from '~/server/utils/db'
+import { getStorageDir, insertUpload, slugExists, findUserById } from '~/server/utils/db'
 import { generateUniqueSlug } from '~/server/utils/slug'
 import { hashPassword } from '~/server/utils/password'
 import { createUnlockToken } from '~/server/utils/view-auth'
 import { checkUploadRateLimit, getClientIP } from '~/server/utils/rate-limit'
 import { isAuthorizedToUpload, hasValidApiToken } from '~/server/utils/upload-auth'
 import { verifyTurnstileToken } from '~/server/utils/turnstile'
+import { getUserIdFromEvent } from '~/server/utils/user-auth'
 
 const STORAGE = getStorageDir()
 
@@ -89,9 +90,15 @@ export default defineEventHandler(async (event) => {
   const expirationField = form.find((f) => f.name === 'expiration' && typeof f.data === 'object')
   const expirationRaw = expirationField?.data
   const expiration = expirationRaw && Buffer.isBuffer(expirationRaw) ? expirationRaw.toString('utf8').trim() : ''
-  const expiresAt = parseExpirationToISO(expiration)
+  let expiresAt = parseExpirationToISO(expiration)
   if (expiration && !expiresAt) {
     throw createError({ statusCode: 400, message: 'Invalid expiration value' })
+  }
+
+  const userId = getUserIdFromEvent(event) ?? null
+  const user = userId ? findUserById(userId) : null
+  if (user && user.never_expire === 1) {
+    expiresAt = null
   }
 
   const filename = (file.filename || 'file').toLowerCase()
@@ -99,7 +106,9 @@ export default defineEventHandler(async (event) => {
   const isApi = hasValidApiToken(event)
   const isZip = filename.endsWith('.zip')
   let maxBytes: number
-  if (isApi) {
+  if (user && user.upload_max_bytes !== null) {
+    maxBytes = user.upload_max_bytes
+  } else if (isApi) {
     maxBytes = 100 * 1024 * 1024
   } else if (isZip) {
     maxBytes = 5 * 1024 * 1024
@@ -171,7 +180,7 @@ export default defineEventHandler(async (event) => {
     entryPoint = pathRelativeToStorage(path.join(uploadDir, entryFile))
   }
 
-  insertUpload(id, slug, entryPoint, passwordHash, ownerToken, expiresAt)
+  insertUpload(id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId)
 
   const baseUrl = getRequestURL(event).origin
   const url = `${baseUrl}/view/${slug}`

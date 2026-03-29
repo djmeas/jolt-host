@@ -40,6 +40,27 @@ function getDb(): Database.Database {
       db.exec(`ALTER TABLE uploads ADD COLUMN expires_at TEXT`)
     }
     db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        upload_max_bytes INTEGER,
+        never_expire INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+    `)
+
+    // check if user_id column exists on uploads, add if not
+    const uploadsColumns = db.prepare("SELECT name FROM pragma_table_info('uploads')").all() as { name: string }[]
+    if (!uploadsColumns.find(c => c.name === 'user_id')) {
+      db.prepare("ALTER TABLE uploads ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE SET NULL").run()
+      db.prepare("CREATE INDEX IF NOT EXISTS idx_uploads_user_id ON uploads(user_id)").run()
+    }
+
+    db.exec(`
       CREATE TABLE IF NOT EXISTS api_tokens (
         id TEXT PRIMARY KEY,
         nickname TEXT UNIQUE NOT NULL,
@@ -67,12 +88,13 @@ export function insertUpload(
   entryPoint: string,
   passwordHash: string | null = null,
   ownerToken: string | null = null,
-  expiresAt: string | null = null
+  expiresAt: string | null = null,
+  userId: string | null = null
 ): void {
   const database = getDb()
   database.prepare(
-    'INSERT INTO uploads (id, slug, entry_point, password_hash, owner_token, created_at, expires_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'), ?)'
-  ).run(id, slug, entryPoint, passwordHash, ownerToken, expiresAt)
+    'INSERT INTO uploads (id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id) VALUES (?, ?, ?, ?, ?, datetime(\'now\'), ?, ?)'
+  ).run(id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId)
 }
 
 export function updatePasswordBySlugAndOwnerToken(slug: string, ownerToken: string, passwordHash: string): boolean {
@@ -91,11 +113,22 @@ export function updateExpirationBySlugAndOwnerToken(slug: string, ownerToken: st
   return info.changes === 1
 }
 
-export type UploadRow = { id: string; slug: string; entry_point: string; password_hash: string | null; owner_token: string | null; created_at: string; expires_at: string | null }
+export type UserRow = {
+  id: string
+  name: string
+  email: string
+  password_hash: string
+  upload_max_bytes: number | null
+  never_expire: number
+  created_at: string
+  updated_at: string
+}
+
+export type UploadRow = { id: string; slug: string; entry_point: string; password_hash: string | null; owner_token: string | null; created_at: string; expires_at: string | null; user_id: string | null }
 
 export function findUploadBySlug(slug: string): UploadRow | undefined {
   const database = getDb()
-  const row = database.prepare('SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at FROM uploads WHERE slug = ?').get(slug) as UploadRow | undefined
+  const row = database.prepare('SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id FROM uploads WHERE slug = ?').get(slug) as UploadRow | undefined
   return row
 }
 
@@ -210,6 +243,12 @@ export function getUploadsPaginated(filter: UploadsFilter = {}): {
   return { items, total, page, limit }
 }
 
+export function updateExpirationBySlug(slug: string, expiresAt: string | null): boolean {
+  const database = getDb()
+  const info = database.prepare('UPDATE uploads SET expires_at = ? WHERE slug = ?').run(expiresAt, slug)
+  return info.changes === 1
+}
+
 export function updatePasswordBySlug(slug: string, passwordHash: string | null): boolean {
   const database = getDb()
   const info = database.prepare('UPDATE uploads SET password_hash = ? WHERE slug = ?').run(passwordHash, slug)
@@ -252,4 +291,80 @@ export function findApiTokenByHash(tokenHash: string): ApiTokenRow | undefined {
   return database.prepare(
     'SELECT id, nickname, token_hash, created_at FROM api_tokens WHERE token_hash = ?'
   ).get(tokenHash) as ApiTokenRow | undefined
+}
+
+// Users
+export function insertUser(id: string, name: string, email: string, passwordHash: string): void {
+  const database = getDb()
+  database.prepare(
+    'INSERT INTO users (id, name, email, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, datetime(\'now\'), datetime(\'now\'))'
+  ).run(id, name, email, passwordHash)
+}
+
+export function findUserByEmail(email: string): UserRow | null {
+  const database = getDb()
+  const row = database.prepare(
+    'SELECT id, name, email, password_hash, upload_max_bytes, never_expire, created_at, updated_at FROM users WHERE email = ?'
+  ).get(email) as UserRow | undefined
+  return row ?? null
+}
+
+export function findUserById(id: string): UserRow | null {
+  const database = getDb()
+  const row = database.prepare(
+    'SELECT id, name, email, password_hash, upload_max_bytes, never_expire, created_at, updated_at FROM users WHERE id = ?'
+  ).get(id) as UserRow | undefined
+  return row ?? null
+}
+
+export function updateUserPassword(id: string, passwordHash: string): void {
+  const database = getDb()
+  database.prepare(
+    'UPDATE users SET password_hash = ?, updated_at = datetime(\'now\') WHERE id = ?'
+  ).run(passwordHash, id)
+}
+
+export function updateUserLimits(id: string, uploadMaxBytes: number | null, neverExpire: number): void {
+  const database = getDb()
+  database.prepare(
+    'UPDATE users SET upload_max_bytes = ?, never_expire = ?, updated_at = datetime(\'now\') WHERE id = ?'
+  ).run(uploadMaxBytes, neverExpire, id)
+}
+
+export function updateUserNameEmail(id: string, name: string, email: string): void {
+  const database = getDb()
+  database.prepare(
+    'UPDATE users SET name = ?, email = ?, updated_at = datetime(\'now\') WHERE id = ?'
+  ).run(name, email, id)
+}
+
+export function deleteUser(id: string): void {
+  const database = getDb()
+  database.prepare('DELETE FROM users WHERE id = ?').run(id)
+}
+
+export function getUsersPaginated(page: number, limit: number): { items: Omit<UserRow, 'password_hash'>[], total: number } {
+  const database = getDb()
+  const p = Math.max(1, page)
+  const l = Math.min(100, Math.max(1, limit))
+  const offset = (p - 1) * l
+  const countRow = database.prepare('SELECT COUNT(*) as n FROM users').get() as { n: number }
+  const total = countRow.n
+  const rows = database.prepare(
+    'SELECT id, name, email, upload_max_bytes, never_expire, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  ).all(l, offset) as Omit<UserRow, 'password_hash'>[]
+  return { items: rows, total }
+}
+
+export function getUploadsByUserId(userId: string, page: number, limit: number): { items: UploadRow[], total: number } {
+  const database = getDb()
+  const p = Math.max(1, page)
+  const l = Math.min(100, Math.max(1, limit))
+  const offset = (p - 1) * l
+  const countRow = database.prepare('SELECT COUNT(*) as n FROM uploads WHERE user_id = ?').get(userId) as { n: number }
+  const total = countRow.n
+  const rows = database.prepare(
+    'SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id FROM uploads WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  ).all(userId, l, offset) as UploadRow[]
+  return { items: rows, total }
 }
