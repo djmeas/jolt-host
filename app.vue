@@ -22,6 +22,7 @@ useHead({
   <Notivue v-slot="item">
     <Notification :item="item" />
   </Notivue>
+  <ClientOnly><LightningBackground /></ClientOnly>
   <div class="app">
     <header class="navbar">
       <NuxtLink to="/" class="navbar-brand" aria-label="Jolt Host home">
@@ -53,6 +54,8 @@ body {
   color: #e4e4e7;
 }
 .app {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
   display: flex;
   flex-direction: column;

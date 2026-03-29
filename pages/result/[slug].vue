@@ -65,7 +65,7 @@ async function copyUrl() {
   max-width: 420px;
   margin: 0 auto;
   padding: 2rem;
-  background: rgba(255, 255, 255, 0.04);
+  background: #18181b;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   text-align: center;

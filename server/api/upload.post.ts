@@ -96,7 +96,16 @@ export default defineEventHandler(async (event) => {
 
   const filename = (file.filename || 'file').toLowerCase()
   const config = useRuntimeConfig()
-  const maxBytes = config.jolthost?.uploadMaxBytes ?? 25 * 1024 * 1024
+  const isApi = hasValidApiToken(event)
+  const isZip = filename.endsWith('.zip')
+  let maxBytes: number
+  if (isApi) {
+    maxBytes = 100 * 1024 * 1024
+  } else if (isZip) {
+    maxBytes = 5 * 1024 * 1024
+  } else {
+    maxBytes = config.jolthost?.uploadMaxBytes ?? 25 * 1024 * 1024
+  }
   const fileSize = Buffer.isBuffer(file.data) ? file.data.length : (file.data as Uint8Array).length
   if (fileSize > maxBytes) {
     throw createError({
