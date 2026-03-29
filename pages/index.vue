@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const { charged } = useLightningCharge()
 const uploadUrl = '/api/upload'
 const fileInput = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
@@ -18,13 +19,13 @@ onUnmounted(() => cleanupTurnstile())
 type UploadResult = { url: string; slug: string; owner_token?: string; url_with_unlock?: string }
 
 const expirationOptions = [
-  { value: '', label: 'Never' },
   { value: '1h', label: '1 hour' },
   { value: '8h', label: '8 hours' },
-  { value: '24h', label: '24 hours' },
+  { value: '1d', label: '1 day' },
+  { value: '3d', label: '3 days' },
   { value: '1w', label: '1 week' },
 ] as const
-const expiration = ref('')
+const expiration = ref('1h')
 const password = ref('')
 const selectedFile = ref<File | null>(null)
 
@@ -43,6 +44,11 @@ function setFile(file: File | null) {
     const name = file.name.toLowerCase()
     if (!name.endsWith('.html') && !name.endsWith('.zip') && !name.endsWith('.md')) {
       error.value = 'Only .html, .zip, or .md files are allowed.'
+      selectedFile.value = null
+      return
+    }
+    if (name.endsWith('.zip') && file.size > 5 * 1024 * 1024) {
+      error.value = 'ZIP files must be 5MB or less.'
       selectedFile.value = null
       return
     }
@@ -140,7 +146,6 @@ async function submitForm() {
 const preventDropNav = (e: DragEvent) => {
   if (e.dataTransfer?.types?.includes('Files')) {
     e.preventDefault()
-    e.stopPropagation()
   }
 }
 onMounted(() => {
@@ -157,7 +162,7 @@ onUnmounted(() => {
   <div class="page">
     <div class="box">
       <h1 class="title">Upload a static site</h1>
-      <p class="subtitle">Choose an HTML file, Markdown, or ZIP, set options, then submit</p>
+      <p class="subtitle">Choose an HTML file, Markdown, or ZIP<span class="zip-info-wrap"><span class="zip-info-icon" tabindex="0" aria-label="ZIP format requirements">ⓘ</span><span class="zip-info-tooltip" role="tooltip">Your ZIP must contain an <strong>index.html</strong> at the root of the archive. Nested HTML files and assets (images, CSS, JS) can be placed in subfolders.</span></span>, set options, then submit</p>
 
       <div
         class="dropzone"
@@ -188,13 +193,19 @@ onUnmounted(() => {
           </button>
         </template>
         <template v-else>
-          <span>Click to upload an HTML file, Markdown, or ZIP</span>
+          <span>Drag & drop or click to upload an HTML file, Markdown, or ZIP</span>
         </template>
       </div>
 
-      <NuxtLink v-if="!selectedFile" to="/paste" class="paste-btn">Paste HTML</NuxtLink>
-      <NuxtLink v-if="!selectedFile" to="/editor" class="paste-btn">Edit HTML</NuxtLink>
+      <div v-if="!selectedFile" class="or-divider"><span>or</span></div>
+
+      <div v-if="!selectedFile" class="paste-row">
+        <NuxtLink to="/paste" class="paste-btn">Paste HTML</NuxtLink>
+        <NuxtLink to="/editor" class="paste-btn">Edit HTML</NuxtLink>
+      </div>
       <NuxtLink v-if="!selectedFile" to="/markdown" class="paste-btn">Paste Markdown</NuxtLink>
+
+      <hr class="section-divider" />
 
       <div class="form-options">
         <div class="form-group">
@@ -207,7 +218,7 @@ onUnmounted(() => {
           >
             <option
               v-for="opt in expirationOptions"
-              :key="opt.value || 'never'"
+              :key="opt.value"
               :value="opt.value"
             >
               {{ opt.label }}
@@ -234,9 +245,19 @@ onUnmounted(() => {
         type="button"
         class="submit-btn"
         :disabled="!selectedFile || uploading || (turnstileEnabled && !turnstileToken)"
+        @mouseenter="charged = true"
+        @mouseleave="charged = false"
         @click="submitForm"
       >
-        {{ uploading ? 'Uploading…' : 'Upload' }}
+        <template v-if="!uploading">
+          <span
+            v-for="(char, i) in 'Upload'"
+            :key="i"
+            class="submit-letter"
+            :style="{ '--i': i }"
+          >{{ char }}</span>
+        </template>
+        <template v-else>Uploading…</template>
       </button>
 
       <div v-if="error" ref="errorEl" class="error-wrap" role="alert">
@@ -264,7 +285,7 @@ onUnmounted(() => {
   max-width: 420px;
   margin: 0 auto;
   padding: 2rem;
-  background: rgba(255, 255, 255, 0.04);
+  background: #18181b;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   text-align: center;
@@ -394,7 +415,47 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .submit-btn:hover:not(:disabled) {
-  background: rgba(167, 139, 250, 0.35);
+  background: rgba(253, 224, 71, 0.1);
+  animation: lightning-pulse 0.9s ease-in-out infinite;
+}
+.submit-letter {
+  display: inline-block;
+}
+.submit-btn:hover:not(:disabled) .submit-letter {
+  animation: lightning-letter 2s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.11s);
+}
+@keyframes lightning-letter {
+  0%, 60%, 100% {
+    color: #c4b5fd;
+    text-shadow: none;
+    transform: translateY(0);
+  }
+  15% {
+    color: #fff;
+    text-shadow: 0 0 6px #fff, 0 0 14px #fde047;
+    transform: translateY(-2px);
+  }
+  30% {
+    color: #fde047;
+    text-shadow: 0 0 10px #fde047, 0 0 24px rgba(253, 224, 71, 0.8), 0 0 48px rgba(253, 224, 71, 0.3);
+    transform: translateY(-4px);
+  }
+  45% {
+    color: #fef08a;
+    text-shadow: 0 0 6px #fde047, 0 0 14px rgba(253, 224, 71, 0.5);
+    transform: translateY(-1px);
+  }
+}
+@keyframes lightning-pulse {
+  0%, 100% {
+    border-color: rgba(253, 224, 71, 0.45);
+    box-shadow: 0 0 8px rgba(253, 224, 71, 0.25), 0 0 20px rgba(253, 224, 71, 0.1);
+  }
+  50% {
+    border-color: rgba(253, 224, 71, 0.9);
+    box-shadow: 0 0 18px rgba(253, 224, 71, 0.6), 0 0 40px rgba(253, 224, 71, 0.35), 0 0 70px rgba(253, 224, 71, 0.1);
+  }
 }
 .submit-btn:disabled {
   opacity: 0.5;
@@ -429,6 +490,77 @@ onUnmounted(() => {
 }
 .error-dismiss:hover {
   opacity: 1;
+}
+.zip-info-wrap {
+  position: relative;
+  display: inline-block;
+  margin-left: 0.2em;
+}
+.zip-info-icon {
+  font-size: 0.8rem;
+  color: #71717a;
+  cursor: default;
+  vertical-align: middle;
+  line-height: 1;
+  outline: none;
+}
+.zip-info-icon:hover,
+.zip-info-icon:focus {
+  color: #a78bfa;
+}
+.zip-info-tooltip {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  width: 220px;
+  background: #1c1c1e;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.78rem;
+  color: #a1a1aa;
+  text-align: left;
+  line-height: 1.5;
+  z-index: 10;
+  pointer-events: none;
+}
+.zip-info-tooltip strong {
+  color: #e4e4e7;
+}
+.zip-info-wrap:hover .zip-info-tooltip,
+.zip-info-icon:focus + .zip-info-tooltip {
+  display: block;
+}
+.section-divider {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 1.25rem 0 0;
+}
+.or-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  color: #52525b;
+  font-size: 0.8rem;
+}
+.or-divider::before,
+.or-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.paste-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.paste-row .paste-btn {
+  margin-top: 0;
+  flex: 1;
 }
 .paste-btn {
   display: block;
