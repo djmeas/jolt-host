@@ -16,13 +16,13 @@ onUnmounted(() => cleanupTurnstile())
 type PasteResult = { url: string; slug: string; owner_token?: string; url_with_unlock?: string }
 
 const expirationOptions = [
-  { value: '', label: 'Never' },
   { value: '1h', label: '1 hour' },
   { value: '8h', label: '8 hours' },
-  { value: '24h', label: '24 hours' },
+  { value: '1d', label: '1 day' },
+  { value: '3d', label: '3 days' },
   { value: '1w', label: '1 week' },
 ] as const
-const expiration = ref('')
+const expiration = ref('1h')
 const password = ref('')
 
 function saveResultToStorage(res: PasteResult) {
@@ -131,7 +131,7 @@ async function submitForm() {
           >
             <option
               v-for="opt in expirationOptions"
-              :key="opt.value || 'never'"
+              :key="opt.value"
               :value="opt.value"
             >
               {{ opt.label }}
@@ -186,7 +186,7 @@ async function submitForm() {
   max-width: 420px;
   margin: 0 auto;
   padding: 2rem;
-  background: rgba(255, 255, 255, 0.04);
+  background: #18181b;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   text-align: center;
