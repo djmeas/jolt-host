@@ -1,4 +1,4 @@
-import { readMultipartFormData, getRequestIP, setResponseHeader } from 'h3'
+import { readMultipartFormData, setResponseHeader } from 'h3'
 import { createWriteStream, mkdirSync, existsSync } from 'fs'
 import path from 'path'
 import { pipeline } from 'stream/promises'
@@ -9,8 +9,9 @@ import { getStorageDir, insertUpload, slugExists } from '~/server/utils/db'
 import { generateUniqueSlug } from '~/server/utils/slug'
 import { hashPassword } from '~/server/utils/password'
 import { createUnlockToken } from '~/server/utils/view-auth'
-import { checkUploadRateLimit } from '~/server/utils/rate-limit'
-import { isAuthorizedToUpload } from '~/server/utils/upload-auth'
+import { checkUploadRateLimit, getClientIP } from '~/server/utils/rate-limit'
+import { isAuthorizedToUpload, hasValidApiToken } from '~/server/utils/upload-auth'
+import { verifyTurnstileToken } from '~/server/utils/turnstile'
 
 const STORAGE = getStorageDir()
 
@@ -44,7 +45,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const ip = getRequestIP(event) ?? 'unknown'
+  const ip = getClientIP(event)
   const { allowed, retryAfter } = checkUploadRateLimit(ip)
   if (!allowed) {
     const err = createError({
@@ -61,6 +62,15 @@ export default defineEventHandler(async (event) => {
   const form = await readMultipartFormData(event)
   if (!form || form.length === 0) {
     throw createError({ statusCode: 400, message: 'No file in request' })
+  }
+
+  if (!hasValidApiToken(event)) {
+    const turnstileField = form?.find((f) => f.name === 'cf-turnstile-response')
+    const turnstileToken = turnstileField?.data ? Buffer.isBuffer(turnstileField.data) ? turnstileField.data.toString('utf8').trim() : '' : ''
+    const turnstileOk = await verifyTurnstileToken(turnstileToken || undefined, ip)
+    if (!turnstileOk) {
+      throw createError({ statusCode: 400, message: 'Captcha verification failed. Please try again.' })
+    }
   }
 
   const file = form.find((f) => f.name === 'file' || f.data)

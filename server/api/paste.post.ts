@@ -1,4 +1,4 @@
-import { getRequestIP, setResponseHeader } from 'h3'
+import { setResponseHeader } from 'h3'
 import { writeFileSync, mkdirSync, existsSync } from 'fs'
 import path from 'path'
 import { randomUUID, randomBytes } from 'crypto'
@@ -6,8 +6,9 @@ import { getStorageDir, insertUpload, slugExists } from '~/server/utils/db'
 import { generateUniqueSlug } from '~/server/utils/slug'
 import { hashPassword } from '~/server/utils/password'
 import { createUnlockToken } from '~/server/utils/view-auth'
-import { checkUploadRateLimit } from '~/server/utils/rate-limit'
-import { isAuthorizedToUpload } from '~/server/utils/upload-auth'
+import { checkUploadRateLimit, getClientIP } from '~/server/utils/rate-limit'
+import { isAuthorizedToUpload, hasValidApiToken } from '~/server/utils/upload-auth'
+import { verifyTurnstileToken } from '~/server/utils/turnstile'
 
 const STORAGE = getStorageDir()
 
@@ -41,7 +42,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const ip = getRequestIP(event) ?? 'unknown'
+  const ip = getClientIP(event)
   const { allowed, retryAfter } = checkUploadRateLimit(ip)
   if (!allowed) {
     const err = createError({
@@ -55,7 +56,15 @@ export default defineEventHandler(async (event) => {
     throw err
   }
 
-  const body = await readBody<{ html?: string; expiration?: string; password?: string }>(event)
+  const body = await readBody<{ html?: string; expiration?: string; password?: string; 'cf-turnstile-response'?: string }>(event)
+  if (!hasValidApiToken(event)) {
+    const turnstileToken = typeof body?.['cf-turnstile-response'] === 'string' ? body['cf-turnstile-response'].trim() : ''
+    const turnstileOk = await verifyTurnstileToken(turnstileToken || undefined, ip)
+    if (!turnstileOk) {
+      throw createError({ statusCode: 400, message: 'Captcha verification failed. Please try again.' })
+    }
+  }
+
   const html = typeof body?.html === 'string' ? body.html.trim() : ''
   if (!html) {
     throw createError({ statusCode: 400, message: 'HTML content is required' })

@@ -5,6 +5,14 @@ const submitting = ref(false)
 const error = ref<string | null>(null)
 const RESULT_BY_SLUG_PREFIX = 'jolthost-result-'
 
+const turnstileContainer = ref<HTMLElement | null>(null)
+const { token: turnstileToken, isEnabled: turnstileEnabled, renderWidget, reset: resetTurnstile, cleanup: cleanupTurnstile } = useTurnstile()
+
+onMounted(() => {
+  if (turnstileContainer.value) renderWidget(turnstileContainer.value)
+})
+onUnmounted(() => cleanupTurnstile())
+
 type PasteResult = { url: string; slug: string; owner_token?: string; url_with_unlock?: string }
 
 const expirationOptions = [
@@ -54,6 +62,11 @@ const errorEl = ref<HTMLElement | null>(null)
 async function submitForm() {
   const content = html.value.trim()
   if (!content) return
+  if (turnstileEnabled.value && !turnstileToken.value) {
+    error.value = 'Please complete the captcha before publishing.'
+    nextTick(() => errorEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
+    return
+  }
   error.value = null
   submitting.value = true
   try {
@@ -63,6 +76,7 @@ async function submitForm() {
         html: content,
         expiration: expiration.value,
         password: password.value.trim(),
+        ...(turnstileToken.value ? { 'cf-turnstile-response': turnstileToken.value } : {}),
       },
     })
     if (!res?.slug) {
@@ -73,6 +87,7 @@ async function submitForm() {
     await useRouter().push(`/result/${res.slug}`)
   } catch (e: unknown) {
     error.value = getErrorMessage(e)
+    resetTurnstile()
     nextTick(() => errorEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
   } finally {
     submitting.value = false
@@ -137,10 +152,12 @@ async function submitForm() {
         </div>
       </div>
 
+      <div v-if="turnstileEnabled" ref="turnstileContainer" class="turnstile-wrap" />
+
       <button
         type="button"
         class="submit-btn"
-        :disabled="!html.trim() || submitting"
+        :disabled="!html.trim() || submitting || (turnstileEnabled && !turnstileToken)"
         @click="submitForm"
       >
         {{ submitting ? 'Publishing…' : 'Publish' }}
@@ -273,6 +290,11 @@ async function submitForm() {
 .preview-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.turnstile-wrap {
+  margin-top: 1.25rem;
+  display: flex;
+  justify-content: center;
 }
 .submit-btn {
   margin-top: 1.25rem;
