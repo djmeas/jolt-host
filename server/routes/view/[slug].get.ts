@@ -1,10 +1,11 @@
 import { getRouterParam, getQuery, setHeader, sendStream, sendRedirect } from 'h3'
 import { join } from 'path'
-import { createReadStream, existsSync } from 'fs'
+import { createReadStream, existsSync, readFileSync } from 'fs'
 import mime from 'mime-types'
 import { getStorageDir, findUploadBySlug } from '~/server/utils/db'
 import { isViewAuthorized, setViewAuthCookie, validateUnlockToken } from '~/server/utils/view-auth'
 import { verifyPassword } from '~/server/utils/password'
+import { renderMarkdownPage } from '~/server/utils/markdown'
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, 'slug')
@@ -47,6 +48,14 @@ export default defineEventHandler(async (event) => {
     const location = url.pathname + '/' + (url.search || '')
     setHeader(event, 'Cache-Control', 'public, max-age=60')
     return sendRedirect(event, location, 302)
+  }
+
+  // Markdown files are rendered server-side into a full HTML page with theme switcher
+  if (row.entry_point.endsWith('.md')) {
+    const markdownSource = readFileSync(filePath, 'utf8')
+    const html = renderMarkdownPage(markdownSource)
+    setHeader(event, 'Content-Type', 'text/html; charset=utf-8')
+    return html
   }
 
   const mimeType = mime.lookup(filePath) || 'text/html'

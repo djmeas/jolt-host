@@ -1,14 +1,14 @@
-# How to Use the Upload Endpoint
+# How to Use the Upload & Paste Endpoints
 
-Upload static HTML files or ZIP archives to host them and get a shareable link.
+Upload HTML files, Markdown files, or ZIP archives — or paste raw HTML/Markdown — to host them and get a shareable link.
 
-## Endpoint
+## Endpoints
 
-```
-POST /api/upload
-```
-
-**Content-Type:** `multipart/form-data`
+| Endpoint | Content-Type | Description |
+|----------|-------------|-------------|
+| `POST /api/upload` | `multipart/form-data` | Upload an `.html`, `.md`, or `.zip` file |
+| `POST /api/paste` | `application/json` | Paste raw HTML as a hosted page |
+| `POST /api/markdown` | `application/json` | Paste raw Markdown as a rendered, themed page |
 
 ## Authentication
 
@@ -23,84 +23,106 @@ Authorization: Bearer jolt_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 Tokens are created in the admin dashboard at `/admin`.
 
-## Form Fields
+## `/api/upload` — File Upload
 
-| Field       | Type   | Required | Description                                                                 |
-|-------------|--------|----------|-----------------------------------------------------------------------------|
-| `file`      | File   | Yes      | An `.html` file or `.zip` archive containing a static site                   |
-| `password`  | String | No       | Password to protect the site (max 200 chars)                                |
-| `expiration`| String | No       | Auto-delete after: `1h`, `8h`, `24h`, `1w`, or `1d` (e.g. `24h` = 24 hours) |
+**Content-Type:** `multipart/form-data`
 
-## Limits
+| Field        | Type   | Required | Description                                                                  |
+|--------------|--------|----------|------------------------------------------------------------------------------|
+| `file`       | File   | Yes      | An `.html` file, `.md` file, or `.zip` archive containing a static site      |
+| `password`   | String | No       | Password to protect the paste (max 200 chars)                                |
+| `expiration` | String | No       | Auto-delete after: `1h`, `8h`, `24h`, `1w`, or `1d` (e.g. `24h` = 24 hours) |
+
+**Limits**
 
 - **File size:** 25MB (configurable via `NUXT_JOLTHOST_UPLOAD_MAX_BYTES`)
 - **Rate limit:** 25 uploads per IP per hour
-- **Accepted formats:** `.html` or `.zip` only
+- **Accepted formats:** `.html`, `.md`, or `.zip`
 - **ZIP requirement:** Must contain at least one `.html` file; `index.html` is used as entry point if present
+- **Markdown:** `.md` files are stored as `index.md` and rendered server-side to HTML with a theme switcher when viewed
 
-## Response
+## `/api/paste` — Paste Raw HTML
 
-Success (200):
+**Content-Type:** `application/json`
 
-```json
-{
-  "slug": "quick-dragon-42",
-  "url": "https://your-host.com/view/quick-dragon-42",
-  "entry_point": "quick-dragon-42/index.html",
-  "owner_token": "abc123...",
-  "url_with_owner_token": "https://your-host.com/view/quick-dragon-42?owner_token=abc123...",
-  "url_with_unlock": "https://your-host.com/view/quick-dragon-42?unlock=TOKEN"
-}
-```
+| Field        | Type   | Required | Description                          |
+|--------------|--------|----------|--------------------------------------|
+| `html`       | String | Yes      | Raw HTML content                     |
+| `password`   | String | No       | Password to protect the paste        |
+| `expiration` | String | No       | Auto-delete after: `1h`, `8h`, `24h`, `1w`, `1d` |
 
-- **slug** – Unique identifier for the site
-- **url** – Public URL to view the site
-- **entry_point** – Path to the main HTML file
-- **owner_token** – Use to update password or expiration via `/api/paste/[slug]/password` and `/api/paste/[slug]/expiration`
-- **url_with_owner_token** – Full URL with owner token in query; convenient for bookmarking or passing to management APIs
-- **url_with_unlock** – (when password provided) Shareable URL with a signed token; visiting it unlocks the page automatically. Token expires when the paste expires (or in 30 days if no expiration). The password is never shown in the URL.
+## `/api/markdown` — Paste Raw Markdown
+
+**Content-Type:** `application/json`
+
+| Field        | Type   | Required | Description                                                           |
+|--------------|--------|----------|-----------------------------------------------------------------------|
+| `markdown`   | String | Yes      | Raw Markdown content                                                  |
+| `password`   | String | No       | Password to protect the paste                                         |
+| `expiration` | String | No       | Auto-delete after: `1h`, `8h`, `24h`, `1w`, `1d`                    |
+
+Markdown pastes are rendered server-side and displayed with a floating theme switcher (GitHub, Dracula, Solarized, Nord). The viewer's theme preference is stored in `localStorage`.
 
 ## Examples
 
 ### cURL
 
 ```bash
-# Basic upload
+# Upload an HTML file
 curl -X POST https://your-host.com/api/upload \
+  -H "Authorization: Bearer jolt_YOUR_TOKEN_HERE" \
   -F "file=@./index.html"
 
-# With password and expiration
+# Upload a Markdown file
 curl -X POST https://your-host.com/api/upload \
+  -H "Authorization: Bearer jolt_YOUR_TOKEN_HERE" \
+  -F "file=@./notes.md"
+
+# Upload a ZIP with password and expiration
+curl -X POST https://your-host.com/api/upload \
+  -H "Authorization: Bearer jolt_YOUR_TOKEN_HERE" \
   -F "file=@./site.zip" \
   -F "password=my-secret" \
   -F "expiration=24h"
 
-# With API token (add Authorization header)
-curl -X POST https://your-host.com/api/upload \
+# Paste raw HTML
+curl -X POST https://your-host.com/api/paste \
   -H "Authorization: Bearer jolt_YOUR_TOKEN_HERE" \
-  -F "file=@./index.html"
+  -H "Content-Type: application/json" \
+  -d '{"html": "<h1>Hello</h1>", "expiration": "1w"}'
+
+# Paste raw Markdown
+curl -X POST https://your-host.com/api/markdown \
+  -H "Authorization: Bearer jolt_YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"markdown": "# Hello\n\nThis is **markdown**.", "expiration": "1w"}'
 ```
 
 ### JavaScript (fetch)
 
 ```javascript
+const token = 'jolt_YOUR_TOKEN_HERE'
+const headers = { 'Authorization': `Bearer ${token}` }
+
+// Upload a file (.html, .md, or .zip)
 const formData = new FormData()
 formData.append('file', fileInput.files[0])
-formData.append('password', 'optional-password')
 formData.append('expiration', '1w')
 
-const headers = {}
-if (apiToken) {
-  headers['Authorization'] = `Bearer ${apiToken}`
-}
-
-const response = await fetch('https://your-host.com/api/upload', {
+const uploadRes = await fetch('https://your-host.com/api/upload', {
   method: 'POST',
   headers,
   body: formData,
 })
-const result = await response.json()
-console.log(result.url)
+console.log((await uploadRes.json()).url)
+
+// Paste raw Markdown
+const mdRes = await fetch('https://your-host.com/api/markdown', {
+  method: 'POST',
+  headers: { ...headers, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ markdown: '# Hello\n\nWorld', expiration: '24h' }),
+})
+console.log((await mdRes.json()).url)
 ```
 
 ### Python (requests)
@@ -108,20 +130,25 @@ console.log(result.url)
 ```python
 import requests
 
-api_token = 'jolt_YOUR_TOKEN_HERE'  # or None for anonymous upload
-headers = {}
-if api_token:
-    headers['Authorization'] = f'Bearer {api_token}'
+headers = {'Authorization': 'Bearer jolt_YOUR_TOKEN_HERE'}
 
-with open('index.html', 'rb') as f:
+# Upload a Markdown file
+with open('notes.md', 'rb') as f:
     response = requests.post(
         'https://your-host.com/api/upload',
         headers=headers,
-        files={'file': ('index.html', f, 'text/html')},
-        data={'password': 'optional', 'expiration': '24h'},
+        files={'file': ('notes.md', f, 'text/markdown')},
+        data={'expiration': '24h'},
     )
-result = response.json()
-print(result['url'])
+print(response.json()['url'])
+
+# Paste raw Markdown
+response = requests.post(
+    'https://your-host.com/api/markdown',
+    headers=headers,
+    json={'markdown': '# Hello\n\nWorld', 'expiration': '1w'},
+)
+print(response.json()['url'])
 ```
 
 ### Postman
@@ -130,15 +157,39 @@ Import the collection from `docs/postman-upload-collection.json`:
 
 1. Open Postman → **Import** → select the JSON file
 2. Set collection variables: **baseUrl** (e.g. `http://localhost:3000`), **apiToken** (your token from `/admin`)
-3. In the Body tab, choose **form-data**, add a `file` key, change type to **File**, and select your `.html` or `.zip`
-4. Optionally add `password` and `expiration` as text fields
+3. For file uploads: In the Body tab, choose **form-data**, add a `file` key, change type to **File**, and select your `.html`, `.md`, or `.zip`
+4. For markdown paste: In the Body tab, choose **raw → JSON**, and send `{ "markdown": "# Your content" }`
+5. Optionally add `password` and `expiration` fields
+
+## Response
+
+All three endpoints return the same shape on success (200):
+
+```json
+{
+  "slug": "quick-dragon-42",
+  "url": "https://your-host.com/view/quick-dragon-42",
+  "entry_point": "quick-dragon-42/index.md",
+  "owner_token": "abc123...",
+  "url_with_owner_token": "https://your-host.com/view/quick-dragon-42?owner_token=abc123...",
+  "url_with_unlock": "https://your-host.com/view/quick-dragon-42?unlock=TOKEN"
+}
+```
+
+- **slug** — unique identifier for the paste
+- **url** — public URL to view the paste
+- **entry_point** — path to the stored file (`index.html`, `index.md`, or the ZIP entry point)
+- **owner_token** — use to update password or expiration via `/api/paste/[slug]/password` and `/api/paste/[slug]/expiration`
+- **url_with_owner_token** — full URL with owner token in query string
+- **url_with_unlock** — *(only when password set)* shareable URL with a signed token that auto-unlocks the page; expires when the paste expires (or in 30 days if no expiration)
 
 ## Error Responses
 
 | Status | Meaning |
 |--------|---------|
-| 400 | Missing file, invalid format, invalid expiration, or password too long |
-| 413 | File exceeds size limit |
+| 400 | Missing or empty content, unsupported file format, invalid expiration, or password too long |
+| 401 | No valid web session or API token |
+| 413 | Content exceeds size limit |
 | 429 | Rate limit exceeded (check `Retry-After` header) |
 
 ## API Tokens

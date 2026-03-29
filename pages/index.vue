@@ -41,8 +41,8 @@ function setFile(file: File | null) {
   error.value = null
   if (file) {
     const name = file.name.toLowerCase()
-    if (!name.endsWith('.html') && !name.endsWith('.zip')) {
-      error.value = 'Only .html or .zip files are allowed.'
+    if (!name.endsWith('.html') && !name.endsWith('.zip') && !name.endsWith('.md')) {
+      error.value = 'Only .html, .zip, or .md files are allowed.'
       selectedFile.value = null
       return
     }
@@ -157,7 +157,7 @@ onUnmounted(() => {
   <div class="page">
     <div class="box">
       <h1 class="title">Upload a static site</h1>
-      <p class="subtitle">Choose an HTML file or ZIP, set options, then submit</p>
+      <p class="subtitle">Choose an HTML file, Markdown, or ZIP, set options, then submit</p>
 
       <div
         class="dropzone"
@@ -170,7 +170,7 @@ onUnmounted(() => {
         <input
           ref="fileInput"
           type="file"
-          accept=".html,.zip"
+          accept=".html,.zip,.md"
           class="input"
           aria-hidden="true"
           tabindex="-1"
@@ -188,12 +188,13 @@ onUnmounted(() => {
           </button>
         </template>
         <template v-else>
-          <span>Click to upload an HTML file or ZIP</span>
+          <span>Click to upload an HTML file, Markdown, or ZIP</span>
         </template>
       </div>
 
       <NuxtLink v-if="!selectedFile" to="/paste" class="paste-btn">Paste HTML</NuxtLink>
       <NuxtLink v-if="!selectedFile" to="/editor" class="paste-btn">Edit HTML</NuxtLink>
+      <NuxtLink v-if="!selectedFile" to="/markdown" class="paste-btn">Paste Markdown</NuxtLink>
 
       <div class="form-options">
         <div class="form-group">

@@ -2,7 +2,7 @@
 
 ![1773207703303](image/README/1773207703303.png)
 
-A minimal pastebin for static sites: upload an HTML file, paste raw HTML, or upload a ZIP and get a shareable URL. Built with **Nuxt 3**, **SQLite** (better-sqlite3), and **Node fs**.
+A minimal pastebin for static sites: upload an HTML file, paste raw HTML or Markdown, or upload a ZIP and get a shareable URL. Built with **Nuxt 3**, **SQLite** (better-sqlite3), and **Node fs**.
 
 ## Requirements
 
@@ -21,9 +21,11 @@ For the **admin dashboard** at `/admin`, set an admin password (see [Environment
 
 ## Features
 
-- **Two ways to publish**
-  - **Upload** — `.html` or `.zip` via drag-and-drop or file picker at `/`, or via `POST /api/upload`
-  - **Paste** — raw HTML at `/paste` or via `POST /api/paste` (writes a single `index.html`)
+- **Three ways to publish**
+  - **Upload** — `.html`, `.md`, or `.zip` via drag-and-drop or file picker at `/`, or via `POST /api/upload`
+  - **Paste HTML** — raw HTML at `/paste` or via `POST /api/paste` (writes a single `index.html`)
+  - **Paste Markdown** — raw Markdown at `/markdown` or via `POST /api/markdown` (writes a single `index.md`)
+- **Markdown rendering** — `.md` pastes are rendered server-side to a full HTML page with a floating **theme switcher** (GitHub, Dracula, Solarized, Nord); theme preference is persisted in `localStorage`
 - **HTML Text Editor** — visual text editor at `/editor`
   - Upload an `.html` file or paste raw HTML
   - Preview the rendered page in an interactive iframe
@@ -43,8 +45,8 @@ For the **admin dashboard** at `/admin`, set an admin password (see [Environment
 ## Authentication
 
 - **Anonymous API uploads are disabled.** To create pastes/upload files you must use either:
-  - **Web** — upload at `/` or paste at `/paste`; a session cookie is set so that browser can upload.
-  - **API token** — create tokens in the admin dashboard; send `Authorization: Bearer jolt_xxxxxxxx...` on `POST /api/upload` or `POST /api/paste`.
+  - **Web** — upload at `/`, paste HTML at `/paste`, or paste Markdown at `/markdown`; a session cookie is set so the browser can upload.
+  - **API token** — create tokens in the admin dashboard; send `Authorization: Bearer jolt_xxxxxxxx...` on `POST /api/upload`, `POST /api/paste`, or `POST /api/markdown`.
 
 ## API
 
@@ -52,8 +54,9 @@ For the **admin dashboard** at `/admin`, set an admin password (see [Environment
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `POST` | `/api/upload` | Web session or API token | `multipart/form-data`: `file` (`.html` or `.zip`), optional `password`, `expiration` (`1h`, `8h`, `24h`, `1w`, `1d`). Returns `slug`, `url`, `entry_point`, `owner_token`, `url_with_owner_token`, and (if password set) `url_with_unlock`. |
+| `POST` | `/api/upload` | Web session or API token | `multipart/form-data`: `file` (`.html`, `.md`, or `.zip`), optional `password`, `expiration` (`1h`, `8h`, `24h`, `1w`, `1d`). Returns `slug`, `url`, `entry_point`, `owner_token`, `url_with_owner_token`, and (if password set) `url_with_unlock`. |
 | `POST` | `/api/paste` | Web session or API token | JSON body: `html`, optional `password`, `expiration`. Same return shape as upload. |
+| `POST` | `/api/markdown` | Web session or API token | JSON body: `markdown`, optional `password`, `expiration`. Renders as a themed HTML page when viewed. Same return shape as upload. |
 
 Upload size limit: default 25MB; set **`NUXT_JOLTHOST_UPLOAD_MAX_BYTES`** (bytes) to change (e.g. `52428800` for 50MB).
 
