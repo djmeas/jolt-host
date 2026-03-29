@@ -39,3 +39,8 @@ coverage
 
 # Uploaded / generated content (remove this line if you want to track storage)
 storage/
+
+# Runtime database (contains user data — never commit)
+data/jolt.db
+data/jolt.db-shm
+data/jolt.db-wal
