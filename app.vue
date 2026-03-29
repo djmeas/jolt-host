@@ -16,6 +16,20 @@ useHead({
     },
   ],
 })
+
+const { user, isLoggedIn, refresh } = useCurrentUser()
+
+onMounted(() => {
+  refresh()
+})
+
+async function logout() {
+  try {
+    await $fetch('/api/auth/logout', { method: 'POST' })
+  } catch {}
+  await refresh()
+  await navigateTo('/')
+}
 </script>
 
 <template>
@@ -35,6 +49,17 @@ useHead({
         /> -->
         <span class="navbar-host">&lt;jolt⚡&gt; HOST</span>
       </NuxtLink>
+      <nav class="navbar-nav">
+        <template v-if="isLoggedIn">
+          <span class="navbar-username" :title="user?.name">{{ user?.name }}</span>
+          <NuxtLink to="/dashboard" class="navbar-nav-link">Dashboard</NuxtLink>
+          <button type="button" class="navbar-logout-btn" @click="logout">Log out</button>
+        </template>
+        <template v-else>
+          <NuxtLink to="/login" class="navbar-nav-link">Log in</NuxtLink>
+          <NuxtLink to="/register" class="navbar-nav-link navbar-nav-link--accent">Register</NuxtLink>
+        </template>
+      </nav>
     </header>
     <main class="main" :class="{ 'main--full': isFullWidth }">
       <NuxtPage />
@@ -66,7 +91,56 @@ body {
   background: rgba(0, 0, 0, 0.2);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.navbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.navbar-username {
+  font-size: 0.9rem;
+  color: #a1a1aa;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.navbar-nav-link {
+  font-size: 0.9rem;
+  color: #a1a1aa;
+  text-decoration: none;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+.navbar-nav-link:hover {
+  color: #e4e4e7;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.navbar-nav-link--accent {
+  background: rgba(167, 139, 250, 0.15);
+  border-color: rgba(167, 139, 250, 0.35);
+  color: #c4b5fd;
+}
+.navbar-nav-link--accent:hover {
+  background: rgba(167, 139, 250, 0.25);
+  border-color: rgba(167, 139, 250, 0.5);
+  color: #c4b5fd;
+}
+.navbar-logout-btn {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.9rem;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  color: #a1a1aa;
+  cursor: pointer;
+}
+.navbar-logout-btn:hover {
+  color: #e4e4e7;
+  border-color: rgba(255, 255, 255, 0.35);
 }
 .navbar-brand {
   display: inline-flex;

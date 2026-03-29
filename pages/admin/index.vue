@@ -173,6 +173,165 @@ async function deleteToken(nickname: string) {
     alert('Failed to delete token')
   }
 }
+
+// --- Users ---
+type UserRow = {
+  id: string
+  name: string
+  email: string
+  upload_max_bytes: number | null
+  never_expire: number
+  created_at: string
+}
+
+type UsersResponse = {
+  items: UserRow[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+const usersPage = ref(1)
+const { data: usersData, refresh: refreshUsers } = await useFetch<UsersResponse>('/api/admin/users', {
+  query: computed(() => ({ page: usersPage.value, limit: 20 })),
+  key: computed(() => `admin-users-${usersPage.value}`),
+})
+const users = computed(() => usersData.value?.items ?? [])
+const usersTotal = computed(() => usersData.value?.total ?? 0)
+const usersTotalPages = computed(() => usersData.value?.totalPages ?? 0)
+const usersCurrentPage = computed(() => usersData.value?.page ?? 1)
+const usersLimit = computed(() => usersData.value?.limit ?? 20)
+const usersStartItem = computed(() => (usersCurrentPage.value - 1) * usersLimit.value + 1)
+const usersEndItem = computed(() => Math.min(usersCurrentPage.value * usersLimit.value, usersTotal.value))
+
+function goToUsersPage(p: number) {
+  usersPage.value = Math.max(1, Math.min(p, usersTotalPages.value))
+}
+
+// Add user form
+const showAddUser = ref(false)
+const addUserName = ref('')
+const addUserEmail = ref('')
+const addUserPassword = ref('')
+const addUserMaxMb = ref('')
+const addUserNeverExpire = ref(false)
+const addUserLoading = ref(false)
+const addUserError = ref<string | null>(null)
+
+async function createUser() {
+  addUserError.value = null
+  if (!addUserName.value.trim() || !addUserEmail.value.trim() || !addUserPassword.value) return
+  addUserLoading.value = true
+  try {
+    const body: Record<string, unknown> = {
+      name: addUserName.value.trim(),
+      email: addUserEmail.value.trim(),
+      password: addUserPassword.value,
+      never_expire: addUserNeverExpire.value ? 1 : 0,
+    }
+    if (addUserMaxMb.value.trim()) {
+      body.upload_max_bytes = Math.round(parseFloat(addUserMaxMb.value) * 1024 * 1024)
+    }
+    await $fetch('/api/admin/users', { method: 'POST', body })
+    addUserName.value = ''
+    addUserEmail.value = ''
+    addUserPassword.value = ''
+    addUserMaxMb.value = ''
+    addUserNeverExpire.value = false
+    showAddUser.value = false
+    await refreshUsers()
+  } catch (e: unknown) {
+    const err = e as { data?: { message?: string }; message?: string }
+    addUserError.value = err.data?.message ?? err.message ?? 'Failed to create user'
+  } finally {
+    addUserLoading.value = false
+  }
+}
+
+// Edit user
+const editingUserId = ref<string | null>(null)
+const editUserName = ref('')
+const editUserEmail = ref('')
+const editUserMaxMb = ref('')
+const editUserNeverExpire = ref(false)
+const editUserLoading = ref(false)
+const editUserError = ref<string | null>(null)
+
+function startEditUser(u: UserRow) {
+  editingUserId.value = u.id
+  editUserName.value = u.name
+  editUserEmail.value = u.email
+  editUserMaxMb.value = u.upload_max_bytes ? String(Math.round(u.upload_max_bytes / 1024 / 1024)) : ''
+  editUserNeverExpire.value = u.never_expire === 1
+  editUserError.value = null
+}
+
+async function saveEditUser(id: string) {
+  editUserError.value = null
+  editUserLoading.value = true
+  try {
+    const body: Record<string, unknown> = {
+      name: editUserName.value.trim(),
+      email: editUserEmail.value.trim(),
+      never_expire: editUserNeverExpire.value ? 1 : 0,
+    }
+    if (editUserMaxMb.value.trim()) {
+      body.upload_max_bytes = Math.round(parseFloat(editUserMaxMb.value) * 1024 * 1024)
+    } else {
+      body.upload_max_bytes = null
+    }
+    await $fetch(`/api/admin/users/${id}`, { method: 'PATCH', body })
+    editingUserId.value = null
+    await refreshUsers()
+  } catch (e: unknown) {
+    const err = e as { data?: { message?: string }; message?: string }
+    editUserError.value = err.data?.message ?? err.message ?? 'Failed to update user'
+  } finally {
+    editUserLoading.value = false
+  }
+}
+
+// Reset user password
+const resetPasswordUserId = ref<string | null>(null)
+const resetPasswordValue = ref('')
+const resetPasswordLoading = ref(false)
+const resetPasswordError = ref<string | null>(null)
+
+function startResetPassword(id: string) {
+  resetPasswordUserId.value = id
+  resetPasswordValue.value = ''
+  resetPasswordError.value = null
+}
+
+async function saveResetPassword(id: string) {
+  resetPasswordError.value = null
+  if (!resetPasswordValue.value) return
+  resetPasswordLoading.value = true
+  try {
+    await $fetch(`/api/admin/users/${id}/password`, {
+      method: 'POST',
+      body: { newPassword: resetPasswordValue.value },
+    })
+    resetPasswordUserId.value = null
+    resetPasswordValue.value = ''
+  } catch (e: unknown) {
+    const err = e as { data?: { message?: string }; message?: string }
+    resetPasswordError.value = err.data?.message ?? err.message ?? 'Failed to reset password'
+  } finally {
+    resetPasswordLoading.value = false
+  }
+}
+
+async function deleteUser(id: string, name: string) {
+  if (!confirm(`Delete user "${name}"? This cannot be undone.`)) return
+  try {
+    await $fetch(`/api/admin/users/${id}/delete`, { method: 'POST' })
+    await refreshUsers()
+  } catch {
+    alert('Failed to delete user')
+  }
+}
 </script>
 
 <template>
@@ -369,6 +528,131 @@ async function deleteToken(nickname: string) {
           </div>
         </div>
       </div>
+
+      <!-- Users section -->
+      <section class="section">
+        <div class="section-header-row">
+          <h2 class="section-title">Users</h2>
+          <button type="button" class="create-token-btn" @click="showAddUser = !showAddUser">
+            {{ showAddUser ? 'Cancel' : 'Add user' }}
+          </button>
+        </div>
+
+        <!-- Add user form -->
+        <div v-if="showAddUser" class="add-user-form">
+          <div class="add-user-fields">
+            <input v-model="addUserName" type="text" class="token-nickname-input" placeholder="Name" :disabled="addUserLoading" />
+            <input v-model="addUserEmail" type="email" class="token-nickname-input" placeholder="Email" :disabled="addUserLoading" />
+            <input v-model="addUserPassword" type="password" class="token-nickname-input" placeholder="Password" :disabled="addUserLoading" />
+            <input v-model="addUserMaxMb" type="number" min="1" class="token-nickname-input" placeholder="Upload limit MB (optional)" :disabled="addUserLoading" style="max-width:200px" />
+            <label class="checkbox-label">
+              <input v-model="addUserNeverExpire" type="checkbox" :disabled="addUserLoading" />
+              Never expire
+            </label>
+            <button
+              type="button"
+              class="create-token-btn"
+              :disabled="addUserLoading || !addUserName.trim() || !addUserEmail.trim() || !addUserPassword"
+              @click="createUser"
+            >
+              {{ addUserLoading ? 'Creating…' : 'Create user' }}
+            </button>
+          </div>
+          <p v-if="addUserError" class="token-error">{{ addUserError }}</p>
+        </div>
+
+        <div v-if="users.length === 0 && usersData" class="token-empty muted">No users yet.</div>
+
+        <div v-else-if="users.length > 0">
+          <div class="table-container" style="margin-top:1rem">
+            <table class="uploads-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Upload Limit</th>
+                  <th>Never Expire</th>
+                  <th>Created</th>
+                  <th class="col-actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(u, idx) in users" :key="u.id" :class="{ 'row-alt': idx % 2 === 1 }">
+                  <!-- Edit inline -->
+                  <template v-if="editingUserId === u.id">
+                    <td colspan="5">
+                      <div class="inline-edit-form">
+                        <input v-model="editUserName" type="text" class="inline-input" placeholder="Name" :disabled="editUserLoading" />
+                        <input v-model="editUserEmail" type="email" class="inline-input" placeholder="Email" :disabled="editUserLoading" />
+                        <input v-model="editUserMaxMb" type="number" min="1" class="inline-input" placeholder="Limit MB (empty=default)" :disabled="editUserLoading" style="width:160px" />
+                        <label class="checkbox-label">
+                          <input v-model="editUserNeverExpire" type="checkbox" :disabled="editUserLoading" />
+                          Never expire
+                        </label>
+                        <button type="button" class="action-btn" :disabled="editUserLoading" @click="saveEditUser(u.id)">Save</button>
+                        <button type="button" class="action-btn muted" @click="editingUserId = null">Cancel</button>
+                        <p v-if="editUserError" class="inline-row-error">{{ editUserError }}</p>
+                      </div>
+                    </td>
+                    <td></td>
+                  </template>
+                  <!-- Reset password inline -->
+                  <template v-else-if="resetPasswordUserId === u.id">
+                    <td colspan="5">
+                      <div class="inline-edit-form">
+                        <input
+                          v-model="resetPasswordValue"
+                          type="password"
+                          class="inline-input"
+                          placeholder="New password"
+                          :disabled="resetPasswordLoading"
+                          @keydown.enter="saveResetPassword(u.id)"
+                        />
+                        <button type="button" class="action-btn" :disabled="resetPasswordLoading || !resetPasswordValue" @click="saveResetPassword(u.id)">Save</button>
+                        <button type="button" class="action-btn muted" @click="resetPasswordUserId = null">Cancel</button>
+                        <p v-if="resetPasswordError" class="inline-row-error">{{ resetPasswordError }}</p>
+                      </div>
+                    </td>
+                    <td></td>
+                  </template>
+                  <!-- Normal row -->
+                  <template v-else>
+                    <td>{{ u.name }}</td>
+                    <td class="muted">{{ u.email }}</td>
+                    <td class="muted">{{ u.upload_max_bytes ? `${Math.round(u.upload_max_bytes / 1024 / 1024)} MB` : 'Default' }}</td>
+                    <td>
+                      <span :class="['badge', u.never_expire ? 'badge-yes' : 'badge-no']">
+                        {{ u.never_expire ? 'Yes' : 'No' }}
+                      </span>
+                    </td>
+                    <td class="muted">{{ formatDate(u.created_at) }}</td>
+                    <td class="col-actions">
+                      <div class="actions">
+                        <button type="button" class="action-btn" @click="startEditUser(u)">Edit</button>
+                        <button type="button" class="action-btn" @click="startResetPassword(u.id)">Reset PW</button>
+                        <button type="button" class="action-btn danger" @click="deleteUser(u.id, u.name)">Delete</button>
+                      </div>
+                    </td>
+                  </template>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="pagination-bar">
+            <span class="pagination-info">
+              Showing {{ usersStartItem }}–{{ usersEndItem }} of {{ usersTotal }}
+            </span>
+            <div class="pagination-controls">
+              <button type="button" class="pagination-btn" :disabled="usersCurrentPage <= 1" title="First page" @click="goToUsersPage(1)">««</button>
+              <button type="button" class="pagination-btn" :disabled="usersCurrentPage <= 1" @click="goToUsersPage(usersCurrentPage - 1)">‹ Previous</button>
+              <span class="pagination-pages">Page {{ usersCurrentPage }} of {{ usersTotalPages }}</span>
+              <button type="button" class="pagination-btn" :disabled="usersCurrentPage >= usersTotalPages" @click="goToUsersPage(usersCurrentPage + 1)">Next ›</button>
+              <button type="button" class="pagination-btn" :disabled="usersCurrentPage >= usersTotalPages" title="Last page" @click="goToUsersPage(usersTotalPages)">»»</button>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <NuxtLink to="/" class="back-link">← Back to home</NuxtLink>
     </div>
@@ -782,5 +1066,54 @@ async function deleteToken(nickname: string) {
 }
 .back-link:hover {
   color: #a78bfa;
+}
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.section-header-row .section-title {
+  margin: 0;
+}
+.add-user-form {
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+.add-user-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  color: #a1a1aa;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.checkbox-label input[type="checkbox"] {
+  accent-color: #a78bfa;
+  width: 14px;
+  height: 14px;
+}
+.inline-edit-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.25rem 0;
+}
+.inline-row-error {
+  width: 100%;
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: #f87171;
 }
 </style>
