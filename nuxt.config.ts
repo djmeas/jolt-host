@@ -13,11 +13,15 @@ export default defineNuxtConfig({
       /** Admin password. Set JOLT_ADMIN_PASSWORD in production. */
       adminPassword: '',
     },
+    /** Cloudflare Turnstile secret key. Set NUXT_TURNSTILE_SECRET_KEY in production. */
+    turnstileSecretKey: '',
     public: {
       jolthost: {
         /** Max upload size in bytes (exposed to client for validation). Use NUXT_PUBLIC_JOLTHOST_UPLOAD_MAX_BYTES to override. */
         uploadMaxBytes: DEFAULT_UPLOAD_MAX_BYTES,
       },
+      /** Cloudflare Turnstile site key (public). Set NUXT_PUBLIC_TURNSTILE_SITE_KEY in production. */
+      turnstileSiteKey: '',
     },
   },
   // @ts-expect-error - nitro is valid at runtime; schema types omit it (Nuxt 4 compat)
