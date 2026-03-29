@@ -7,6 +7,14 @@ const error = ref<string | null>(null)
 const RESULT_STORAGE_KEY = 'jolthost-last-upload'
 const RESULT_BY_SLUG_PREFIX = 'jolthost-result-'
 
+const turnstileContainer = ref<HTMLElement | null>(null)
+const { token: turnstileToken, isEnabled: turnstileEnabled, renderWidget, reset: resetTurnstile, cleanup: cleanupTurnstile } = useTurnstile()
+
+onMounted(() => {
+  if (turnstileContainer.value) renderWidget(turnstileContainer.value)
+})
+onUnmounted(() => cleanupTurnstile())
+
 type UploadResult = { url: string; slug: string; owner_token?: string; url_with_unlock?: string }
 
 const expirationOptions = [
@@ -91,6 +99,11 @@ const errorEl = ref<HTMLElement | null>(null)
 async function submitForm() {
   const file = selectedFile.value
   if (!file) return
+  if (turnstileEnabled.value && !turnstileToken.value) {
+    error.value = 'Please complete the captcha before uploading.'
+    nextTick(() => errorEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
+    return
+  }
   error.value = null
   uploading.value = true
   try {
@@ -101,6 +114,9 @@ async function submitForm() {
     }
     if (password.value.trim()) {
       form.append('password', password.value.trim())
+    }
+    if (turnstileToken.value) {
+      form.append('cf-turnstile-response', turnstileToken.value)
     }
     const res = await $fetch<UploadResult>(uploadUrl, {
       method: 'POST',
@@ -114,6 +130,7 @@ async function submitForm() {
     await useRouter().push(`/result/${res.slug}`)
   } catch (e: unknown) {
     error.value = getUploadErrorMessage(e)
+    resetTurnstile()
     nextTick(() => errorEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
   } finally {
     uploading.value = false
@@ -210,10 +227,12 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <div v-if="turnstileEnabled" ref="turnstileContainer" class="turnstile-wrap" />
+
       <button
         type="button"
         class="submit-btn"
-        :disabled="!selectedFile || uploading"
+        :disabled="!selectedFile || uploading || (turnstileEnabled && !turnstileToken)"
         @click="submitForm"
       >
         {{ uploading ? 'Uploading…' : 'Upload' }}
@@ -355,6 +374,11 @@ onUnmounted(() => {
 }
 .form-input::placeholder {
   color: #71717a;
+}
+.turnstile-wrap {
+  margin-top: 1.25rem;
+  display: flex;
+  justify-content: center;
 }
 .submit-btn {
   margin-top: 1.25rem;
