@@ -31,6 +31,7 @@ ENV NITRO_PORT=3000
 COPY --from=builder /app/.output ./.output
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
+COPY --from=builder /app/docs ./docs
 
 # App writes to ./data and ./storage (mount volumes in production)
 EXPOSE 3000
