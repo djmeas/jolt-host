@@ -61,7 +61,7 @@ onMounted(() => {
         id: id++,
         x: xStart + c * xStep,
         y,
-        size: rand(13, 28),
+        size: rand(26, 56),
         baseOpacity: rand(0.03, 0.08),
         rotation: rand(-25, 25),
         floatDuration: rand(5, 12),

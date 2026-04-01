@@ -167,8 +167,63 @@ onUnmounted(() => {
 
 <template>
   <div class="page">
-    <div class="box">
-      <h1 class="title">Upload a static site</h1>
+    <div class="hero">
+      <div class="hero-left">
+        <p class="hero-eyebrow">Temporary Static Site Hosting</p>
+        <h1 class="hero-headline">Publish your static site in<br><span class="hero-highlight"><span
+          v-for="(char, i) in 'seconds'"
+          :key="i"
+          class="hero-highlight-letter"
+          :style="{ '--i': i }"
+        >{{ char }}</span><svg class="hero-clock" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <!-- Face -->
+          <circle cx="50" cy="50" r="47" class="clock-face"/>
+          <!-- Tick marks: every 30°; cardinal positions (h%3===1) are longer -->
+          <template v-for="h in 12" :key="h">
+            <line
+              x1="50" :y1="h % 3 === 1 ? 6 : 10" x2="50" y2="15"
+              class="clock-tick"
+              :class="{ 'clock-tick-major': h % 3 === 1 }"
+              :transform="`rotate(${(h - 1) * 30}, 50, 50)`"
+            />
+          </template>
+          <!-- Hour hand -->
+          <line x1="50" y1="50" x2="50" y2="31" class="clock-hand clock-hour">
+            <animateTransform attributeName="transform" type="rotate"
+              from="0 50 50" to="360 50 50" dur="43.2s" repeatCount="indefinite"/>
+          </line>
+          <!-- Minute hand -->
+          <line x1="50" y1="50" x2="50" y2="19" class="clock-hand clock-minute">
+            <animateTransform attributeName="transform" type="rotate"
+              from="0 50 50" to="360 50 50" dur="3.6s" repeatCount="indefinite"/>
+          </line>
+          <!-- Second hand with counterbalance tail -->
+          <line x1="50" y1="62" x2="50" y2="13" class="clock-hand clock-second">
+            <animateTransform attributeName="transform" type="rotate"
+              from="0 50 50" to="360 50 50" dur="6s" repeatCount="indefinite"/>
+          </line>
+          <!-- Center pivot cap -->
+          <circle cx="50" cy="50" r="4.5" class="clock-center-cap"/>
+          <circle cx="50" cy="50" r="2" fill="#18181b"/>
+        </svg></span></h1>
+        <p class="hero-body">Upload an HTML file, static site ZIP, or Markdown and get a shareable URL — instantly.</p>
+        <ul class="hero-perks">
+          <li><span class="perk-icon">⚡</span> No sign-up required</li>
+          <li><span class="perk-icon">🚫</span> Zero ad tracking</li>
+          <li><span class="perk-icon">🔒</span> Optional password protection</li>
+          <li><span class="perk-icon">💸</span> Completely free</li>
+        </ul>
+        <a v-if="$config.public.showBuyMeACoffee" href="https://www.buymeacoffee.com/harrymeas" target="_blank" rel="noopener" class="bmc-link">
+          <img
+            src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
+            alt="Buy Me A Coffee"
+            class="bmc-badge"
+          />
+        </a>
+      </div><!-- .hero-left -->
+      <div class="hero-right">
+        <div class="box">
+          <h2 class="title">Upload a static site</h2>
       <p class="subtitle">Choose an HTML file, Markdown, or ZIP<span class="zip-info-wrap"><span class="zip-info-icon" tabindex="0" aria-label="ZIP format requirements">ⓘ</span><span class="zip-info-tooltip" role="tooltip">Your ZIP must contain an <strong>index.html</strong> at the root of the archive. Nested HTML files and assets (images, CSS, JS) can be placed in subfolders.</span></span>, set options, then submit</p>
 
       <div
@@ -269,15 +324,10 @@ onUnmounted(() => {
         <p class="error">{{ error }}</p>
         <button type="button" class="error-dismiss" aria-label="Dismiss" @click="error = null">×</button>
       </div>
-    </div>
+        </div><!-- .box -->
 
-    <a v-if="$config.public.showBuyMeACoffee" href="https://www.buymeacoffee.com/harrymeas" target="_blank" rel="noopener" class="bmc-link">
-      <img
-        src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
-        alt="Buy Me A Coffee"
-        class="bmc-badge"
-      />
-    </a>
+      </div><!-- .hero-right -->
+    </div><!-- .hero -->
   </div>
 </template>
 
@@ -289,10 +339,118 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
 }
+.hero {
+  width: 100%;
+  max-width: 960px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+  align-items: center;
+}
+.hero-left {
+  padding: 1rem 0;
+}
+.hero-eyebrow {
+  margin: 0 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #a78bfa;
+}
+.hero-headline {
+  margin: 0 0 1.25rem;
+  font-family: 'Bungee', sans-serif;
+  font-size: clamp(2.2rem, 4vw, 3.2rem);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: #f4f4f5;
+}
+.hero-highlight {
+  color: #fde047;
+  text-shadow: 0 0 40px rgba(253, 224, 71, 0.35);
+}
+.hero-headline:hover .hero-highlight-letter {
+  animation: lightning-letter 2s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.11s);
+}
+.hero-highlight-letter {
+  display: inline-block;
+}
+.hero-clock {
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  margin-left: 0.35em;
+  vertical-align: -0.1em;
+  overflow: visible;
+}
+.clock-face {
+  fill: rgba(253, 224, 71, 0.1);
+  stroke: #fde047;
+  stroke-width: 2.5;
+}
+.clock-tick {
+  stroke: #fde047;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  opacity: 0.5;
+}
+.clock-tick-major {
+  stroke-width: 2.5;
+  opacity: 0.85;
+}
+.clock-hand {
+  stroke: #fde047;
+  stroke-linecap: round;
+}
+.clock-hour {
+  stroke-width: 4.5;
+}
+.clock-minute {
+  stroke-width: 2.5;
+}
+.clock-second {
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+.clock-center-cap {
+  fill: #fde047;
+}
+.hero-body {
+  margin: 0 0 2rem;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: #a1a1aa;
+  max-width: 340px;
+}
+.hero-perks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.hero-perks li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.95rem;
+  color: #d4d4d8;
+}
+.perk-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.hero-right {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
 .box {
   width: 100%;
-  max-width: 420px;
-  margin: 0 auto;
   padding: 2rem;
   background: #18181b;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -309,6 +467,21 @@ onUnmounted(() => {
   margin: 0 0 1.5rem;
   font-size: 0.9rem;
   color: #a1a1aa;
+}
+@media (max-width: 700px) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  .hero-left {
+    text-align: center;
+  }
+  .hero-body {
+    max-width: 100%;
+  }
+  .hero-perks {
+    align-items: center;
+  }
 }
 .dropzone {
   border: 2px dashed rgba(255, 255, 255, 0.15);
