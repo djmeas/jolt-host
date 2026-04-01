@@ -1,0 +1,17 @@
+name = "jolt-host"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".output"
+
+# ── D1 database ──────────────────────────────────────────────
+# database_id is templated at deploy time from the CF_D1_DATABASE_ID secret.
+# For local dev: copy wrangler.toml.example or set your own ID below.
+[[d1_databases]]
+binding = "DB"
+database_name = "jolt-host-db"
+database_id = "${CF_D1_DATABASE_ID}"
+
+# ── R2 object storage ───────────────────────────────────────
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "jolt-host-storage"
