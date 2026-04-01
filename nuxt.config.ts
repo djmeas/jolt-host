@@ -24,6 +24,8 @@ export default defineNuxtConfig({
       turnstileSiteKey: '',
       /** Show Buy Me a Coffee badge. Set SHOW_BUYMEACOFFEE_LINK=true to enable. */
       showBuyMeACoffee: process.env.SHOW_BUYMEACOFFEE_LINK === 'true',
+      /** Cloudflare Web Analytics token. Set CF_BEACON_TOKEN in production. */
+      cfBeaconToken: process.env.CF_BEACON_TOKEN ?? '',
     },
   },
   app: {
@@ -37,11 +39,15 @@ export default defineNuxtConfig({
         },
       ],
       script: [
-        {
-          src: 'https://static.cloudflareinsights.com/beacon.min.js',
-          defer: true,
-          'data-cf-beacon': '{"token": "3ee9931a9097410bb0195225e9b27d7d"}',
-        },
+        ...(process.env.CF_BEACON_TOKEN
+          ? [
+              {
+                src: 'https://static.cloudflareinsights.com/beacon.min.js',
+                defer: true,
+                'data-cf-beacon': `{"token": "${process.env.CF_BEACON_TOKEN}"}`,
+              },
+            ]
+          : []),
       ],
     },
   },
