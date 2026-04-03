@@ -39,6 +39,10 @@ function getDb(): Database.Database {
     if (!hasExpiresAt) {
       db.exec(`ALTER TABLE uploads ADD COLUMN expires_at TEXT`)
     }
+    const hasTitle = (db.prepare("SELECT 1 FROM pragma_table_info('uploads') WHERE name = 'title'").get() as { '1': number } | undefined) != null
+    if (!hasTitle) {
+      db.exec(`ALTER TABLE uploads ADD COLUMN title TEXT`)
+    }
     db.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
@@ -93,12 +97,13 @@ export function insertUpload(
   passwordHash: string | null = null,
   ownerToken: string | null = null,
   expiresAt: string | null = null,
-  userId: string | null = null
+  userId: string | null = null,
+  title: string | null = null
 ): void {
   const database = getDb()
   database.prepare(
-    'INSERT INTO uploads (id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id) VALUES (?, ?, ?, ?, ?, datetime(\'now\'), ?, ?)'
-  ).run(id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId)
+    'INSERT INTO uploads (id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id, title) VALUES (?, ?, ?, ?, ?, datetime(\'now\'), ?, ?, ?)'
+  ).run(id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId, title)
 }
 
 export function updatePasswordBySlugAndOwnerToken(slug: string, ownerToken: string, passwordHash: string): boolean {
@@ -128,11 +133,11 @@ export type UserRow = {
   updated_at: string
 }
 
-export type UploadRow = { id: string; slug: string; entry_point: string; password_hash: string | null; owner_token: string | null; created_at: string; expires_at: string | null; user_id: string | null }
+export type UploadRow = { id: string; slug: string; entry_point: string; password_hash: string | null; owner_token: string | null; created_at: string; expires_at: string | null; user_id: string | null; title: string | null }
 
 export function findUploadBySlug(slug: string): UploadRow | undefined {
   const database = getDb()
-  const row = database.prepare('SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id FROM uploads WHERE slug = ?').get(slug) as UploadRow | undefined
+  const row = database.prepare('SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id, title FROM uploads WHERE slug = ?').get(slug) as UploadRow | undefined
   return row
 }
 
@@ -168,13 +173,14 @@ export type UploadListItem = {
   created_at: string
   expires_at: string | null
   has_password: boolean
+  title: string | null
 }
 
 export function getAllUploads(): UploadListItem[] {
   const database = getDb()
   const rows = database
     .prepare(
-      `SELECT id, slug, entry_point, created_at, expires_at,
+      `SELECT id, slug, entry_point, created_at, expires_at, title,
         CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END as has_password
        FROM uploads ORDER BY created_at DESC`
     )
@@ -186,6 +192,7 @@ export function getAllUploads(): UploadListItem[] {
     created_at: r.created_at,
     expires_at: r.expires_at,
     has_password: r.has_password === 1,
+    title: r.title,
   }))
 }
 
@@ -233,7 +240,7 @@ export function getUploadsPaginated(filter: UploadsFilter = {}): {
 
   const rows = database
     .prepare(
-      `SELECT id, slug, entry_point, created_at, expires_at,
+      `SELECT id, slug, entry_point, created_at, expires_at, title,
         CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END as has_password
        FROM uploads ${whereClause}
        ORDER BY created_at DESC
@@ -248,6 +255,7 @@ export function getUploadsPaginated(filter: UploadsFilter = {}): {
     created_at: r.created_at,
     expires_at: r.expires_at,
     has_password: r.has_password === 1,
+    title: r.title,
   }))
 
   return { items, total, page, limit }
@@ -374,7 +382,7 @@ export function getUploadsByUserId(userId: string, page: number, limit: number):
   const countRow = database.prepare('SELECT COUNT(*) as n FROM uploads WHERE user_id = ?').get(userId) as { n: number }
   const total = countRow.n
   const rows = database.prepare(
-    'SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id FROM uploads WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    'SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id, title FROM uploads WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
   ).all(userId, l, offset) as UploadRow[]
   return { items: rows, total }
 }

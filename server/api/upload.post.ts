@@ -95,6 +95,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Invalid expiration value' })
   }
 
+  const titleField = form.find((f) => f.name === 'title' && typeof f.data === 'object')
+  const titleRaw = titleField?.data
+  const title = titleRaw && Buffer.isBuffer(titleRaw) ? titleRaw.toString('utf8').trim().slice(0, 100) : null
+
   const userId = getUserIdFromEvent(event) ?? null
   const user = userId ? findUserById(userId) : null
   if (user && user.never_expire === 1) {
@@ -180,7 +184,7 @@ export default defineEventHandler(async (event) => {
     entryPoint = pathRelativeToStorage(path.join(uploadDir, entryFile))
   }
 
-  insertUpload(id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId)
+  insertUpload(id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId, title || null)
 
   const baseUrl = getRequestURL(event).origin
   const url = `${baseUrl}/view/${slug}`
@@ -190,6 +194,8 @@ export default defineEventHandler(async (event) => {
     entry_point: entryPoint,
     owner_token: ownerToken,
     url_with_owner_token: `${url}?owner_token=${encodeURIComponent(ownerToken)}`,
+    expires_at: expiresAt ?? '',
+    title: title || '',
   }
   if (password.length > 0) {
     const unlockToken = createUnlockToken(slug, expiresAt)

@@ -36,13 +36,15 @@ const expirationOptions = [
 ] as const
 const expiration = ref('1h')
 const password = ref('')
+const siteTitle = ref('')
 const selectedFile = ref<File | null>(null)
 
 function saveResultToStorage(res: UploadResult) {
   if (import.meta.client) {
     try {
-      sessionStorage.setItem(RESULT_STORAGE_KEY, JSON.stringify(res))
-      sessionStorage.setItem(`${RESULT_BY_SLUG_PREFIX}${res.slug}`, JSON.stringify(res))
+      const stored = { ...res, title: siteTitle.value.trim() || undefined }
+      sessionStorage.setItem(RESULT_STORAGE_KEY, JSON.stringify(stored))
+      sessionStorage.setItem(`${RESULT_BY_SLUG_PREFIX}${res.slug}`, JSON.stringify(stored))
     } catch (_) {}
   }
 }
@@ -129,6 +131,9 @@ async function submitForm() {
     }
     if (password.value.trim()) {
       form.append('password', password.value.trim())
+    }
+    if (siteTitle.value.trim()) {
+      form.append('title', siteTitle.value.trim())
     }
     if (turnstileToken.value) {
       form.append('cf-turnstile-response', turnstileToken.value)
@@ -263,8 +268,8 @@ const boxPowered = ref(false)
             Change file
           </button>
         </template>
-        <template v-else>
-          <span>Drag & drop or click to upload an HTML file, Markdown, or ZIP</span>
+         <template v-else>
+          <span>Drag & drop or click to upload a .html, .zip, or .md file</span>
         </template>
       </div>
 
@@ -279,6 +284,18 @@ const boxPowered = ref(false)
       <hr class="section-divider" />
 
       <div class="form-options">
+        <div class="form-group">
+          <label for="site-title" class="form-label">Title (optional)</label>
+          <input
+            id="site-title"
+            v-model="siteTitle"
+            type="text"
+            class="form-input"
+            placeholder="My awesome site"
+            maxlength="100"
+            :disabled="uploading"
+          />
+        </div>
         <div class="form-group">
           <label for="expiration" class="form-label">Expiration</label>
           <select

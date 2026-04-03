@@ -19,10 +19,11 @@ Jolt Host lets you publish a static site in seconds — no account required. Upl
 ## Uploading a file
 
 1. On the home page, drag your file into the upload area — or click it to open a file picker.
-2. Set an **expiration** (how long before the link stops working): 1 hour, 8 hours, 1 day, 3 days, or 1 week.
-3. Optionally set a **password** — anyone visiting your link will need to enter it first.
-4. Click **Upload**.
-5. You'll land on a result page showing your live link. Copy it and share it.
+2. Optionally enter a **title** — a personal label for your own reference (e.g. "Client demo v2"). It appears in your My Sites history and is appended to the share URL as a `?title=` parameter.
+3. Set an **expiration** (how long before the link stops working): 1 hour, 8 hours, 1 day, 3 days, or 1 week.
+4. Optionally set a **password** — anyone visiting your link will need to enter it first.
+5. Click **Upload**.
+6. You'll land on a result page showing your live link. Copy it and share it.
 
 ---
 
@@ -82,6 +83,22 @@ my-site.zip
 └── images/
     └── logo.png
 ```
+
+---
+
+## My Sites
+
+After each successful upload, the site is saved to your **My Sites** history, accessible via the link in the top-left of the navbar (it only appears once you have at least one saved site).
+
+My Sites shows each entry's title (if you set one), the live link, its publish date, and its expiration date.
+
+**Important:** My Sites data is stored entirely in your browser's `localStorage`. It never leaves your device and is not linked to your account or IP address. This means:
+
+- It is only visible in the browser you used to publish
+- It will be lost if you clear your browser data or use a private/incognito window
+- It is not synced across devices or browsers
+
+You can delete all My Sites history at any time by clicking the **Clear My Sites data** button at the bottom of the My Sites page.
 
 ---
 

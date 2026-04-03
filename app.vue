@@ -21,8 +21,12 @@ const { user, isLoggedIn, refresh } = useCurrentUser()
 const { data: siteConfig } = await useFetch('/api/config')
 const authEnabled = computed(() => siteConfig.value?.authEnabled ?? false)
 
+const { sites, load: loadMySites } = useMySites()
+const hasMySites = computed(() => sites.value.length > 0)
+
 onMounted(() => {
   refresh()
+  loadMySites()
 })
 
 async function logout() {
@@ -41,16 +45,21 @@ async function logout() {
   <ClientOnly><LightningBackground /></ClientOnly>
   <div class="app">
     <header class="navbar">
-      <NuxtLink to="/" class="navbar-brand" aria-label="Jolt Host home">
-        <!-- <img
-          class="navbar-logo"
-          :src="logoUrl"
-          alt="Jolt Host"
-          width="160"
-          height="42"
-        /> -->
-        <span class="navbar-host">&lt;jolt⚡&gt; HOST</span>
-      </NuxtLink>
+      <div class="navbar-left">
+        <NuxtLink to="/" class="navbar-brand" aria-label="Jolt Host home">
+          <!-- <img
+            class="navbar-logo"
+            :src="logoUrl"
+            alt="Jolt Host"
+            width="160"
+            height="42"
+          /> -->
+          <span class="navbar-host">&lt;jolt⚡&gt; HOST</span>
+        </NuxtLink>
+        <ClientOnly>
+          <NuxtLink v-if="hasMySites" to="/my-sites" class="navbar-nav-link">My Sites</NuxtLink>
+        </ClientOnly>
+      </div>
       <nav class="navbar-nav">
         <template v-if="isLoggedIn">
           <span class="navbar-username" :title="user?.name">{{ user?.name }}</span>
@@ -117,6 +126,11 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+}
+.navbar-left {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
 }
 .navbar-nav {
   display: flex;
