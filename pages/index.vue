@@ -398,6 +398,9 @@ const boxPowered = ref(false)
 .hero-left {
   padding: 1rem 0;
 }
+select#expiration option {
+    color: black;
+}
 .hero-eyebrow {
   margin: 0 0 0.75rem;
   font-size: 0.75rem;
