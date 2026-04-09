@@ -55,7 +55,7 @@ export default defineEventHandler(async (event) => {
     throw err
   }
 
-  const body = await readBody<{ html?: string; expiration?: string; password?: string; 'cf-turnstile-response'?: string }>(event)
+  const body = await readBody<{ html?: string; expiration?: string; password?: string; title?: string; 'cf-turnstile-response'?: string }>(event)
   if (!(await hasValidApiToken(event))) {
     const turnstileToken = typeof body?.['cf-turnstile-response'] === 'string' ? body['cf-turnstile-response'].trim() : ''
     const turnstileOk = await verifyTurnstileToken(turnstileToken || undefined, ip)
@@ -80,6 +80,8 @@ export default defineEventHandler(async (event) => {
   if (expiration && !expiresAt) {
     throw createError({ statusCode: 400, message: 'Invalid expiration value' })
   }
+
+  const title = typeof body?.title === 'string' ? body.title.trim().slice(0, 100) : null
 
   const userId = getUserIdFromEvent(event) ?? null
   const user = userId ? await findUserById(event, userId) : null
@@ -108,7 +110,7 @@ export default defineEventHandler(async (event) => {
     httpMetadata: { contentType: 'text/html' },
   })
 
-  await insertUpload(event, id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId)
+  await insertUpload(event, id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId, title || null)
 
   const baseUrl = getRequestURL(event).origin
   const url = `${baseUrl}/view/${slug}`
@@ -118,6 +120,8 @@ export default defineEventHandler(async (event) => {
     entry_point: entryPoint,
     owner_token: ownerToken,
     url_with_owner_token: `${url}?owner_token=${encodeURIComponent(ownerToken)}`,
+    expires_at: expiresAt ?? '',
+    title: title || '',
   }
   if (password.length > 0) {
     const unlockToken = createUnlockToken(slug, expiresAt)

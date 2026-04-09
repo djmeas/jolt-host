@@ -1,14 +1,14 @@
 <script setup lang="ts">
-const { data } = await useFetch<{ html: string }>('/api/how-to')
+const { data } = await useFetch<{ html: string }>('/api/terms')
 
 useSeoMeta({
-  title: 'How to Use Jolt Host',
-  description: 'Learn how to upload HTML, Markdown, or ZIP files and share static sites instantly with Jolt Host.',
-  ogTitle: 'How to Use Jolt Host',
-  ogDescription: 'Learn how to upload HTML, Markdown, or ZIP files and share static sites instantly.',
+  title: 'Terms and Conditions',
+  description: 'Read the Jolt Host Terms and Conditions to understand your rights and responsibilities when using the service.',
+  ogTitle: 'Terms and Conditions — Jolt Host',
+  ogDescription: 'Read the Jolt Host Terms and Conditions.',
 })
 
-useHead({ link: [{ rel: 'canonical', href: 'https://host.thunderjolt.app/how-to' }] })
+useHead({ link: [{ rel: 'canonical', href: 'https://host.thunderjolt.app/terms' }] })
 </script>
 
 <template>
@@ -36,6 +36,8 @@ useHead({ link: [{ rel: 'canonical', href: 'https://host.thunderjolt.app/how-to'
 .back-link:hover {
   color: #a78bfa;
 }
+
+/* Prose styles for the rendered markdown */
 .prose :deep(h1) {
   font-size: 1.75rem;
   font-weight: 700;
@@ -98,21 +100,6 @@ useHead({ link: [{ rel: 'canonical', href: 'https://host.thunderjolt.app/how-to'
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
   color: #c4b5fd;
-}
-.prose :deep(pre) {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 1rem 1.25rem;
-  overflow-x: auto;
-  margin: 0 0 1rem;
-}
-.prose :deep(pre code) {
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: 0.875rem;
-  color: #d4d4d8;
 }
 .prose :deep(table) {
   width: 100%;

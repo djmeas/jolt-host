@@ -1,4 +1,6 @@
 <script setup lang="ts">
+useHead({ meta: [{ name: 'robots', content: 'noindex, nofollow' }] })
+
 type UploadRow = {
   slug: string
   entry_point: string

@@ -10,6 +10,7 @@ export type UploadRow = {
   created_at: string
   expires_at: string | null
   user_id: string | null
+  title: string | null
 }
 
 export type UserRow = {
@@ -30,6 +31,7 @@ export type UploadListItem = {
   created_at: string
   expires_at: string | null
   has_password: boolean
+  title: string | null
 }
 
 export type UploadsFilter = {
@@ -57,21 +59,22 @@ export async function insertUpload(
   passwordHash: string | null = null,
   ownerToken: string | null = null,
   expiresAt: string | null = null,
-  userId: string | null = null
+  userId: string | null = null,
+  title: string | null = null
 ): Promise<void> {
   const db = useDB(event)
   await db
     .prepare(
-      "INSERT INTO uploads (id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id) VALUES (?, ?, ?, ?, ?, datetime('now'), ?, ?)"
+      "INSERT INTO uploads (id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id, title) VALUES (?, ?, ?, ?, ?, datetime('now'), ?, ?, ?)"
     )
-    .bind(id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId)
+    .bind(id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId, title)
     .run()
 }
 
 export async function findUploadBySlug(event: H3Event, slug: string): Promise<UploadRow | null> {
   const db = useDB(event)
   return await db
-    .prepare('SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id FROM uploads WHERE slug = ?')
+    .prepare('SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id, title FROM uploads WHERE slug = ?')
     .bind(slug)
     .first<UploadRow>()
 }
@@ -165,7 +168,7 @@ export async function getUploadsPaginated(
 
   const result = await db
     .prepare(
-      `SELECT id, slug, entry_point, created_at, expires_at,
+      `SELECT id, slug, entry_point, created_at, expires_at, title,
         CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END as has_password
        FROM uploads ${whereClause}
        ORDER BY created_at DESC
@@ -181,6 +184,7 @@ export async function getUploadsPaginated(
     created_at: r.created_at,
     expires_at: r.expires_at,
     has_password: r.has_password === 1,
+    title: r.title,
   }))
 
   return { items, total, page, limit }
@@ -263,7 +267,7 @@ export async function getUploadsByUserId(
   const total = countRow?.n ?? 0
   const result = await db
     .prepare(
-      'SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id FROM uploads WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+      'SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id, title FROM uploads WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
     )
     .bind(userId, l, offset)
     .all<UploadRow>()

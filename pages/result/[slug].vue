@@ -1,16 +1,28 @@
 <script setup lang="ts">
+useHead({ meta: [{ name: 'robots', content: 'noindex, nofollow' }] })
+
 const route = useRoute()
 const slug = computed(() => route.params.slug as string)
 const RESULT_BY_SLUG_PREFIX = 'jolthost-result-'
 
-type StoredResult = { url_with_unlock?: string; url?: string; owner_token?: string }
+type StoredResult = { url_with_unlock?: string; url?: string; owner_token?: string; expires_at?: string; title?: string }
 
 const storedResult = ref<StoredResult | null>(null)
+const { addSite } = useMySites()
 
 onMounted(() => {
   try {
     const raw = sessionStorage.getItem(`${RESULT_BY_SLUG_PREFIX}${slug.value}`)
-    if (raw) storedResult.value = JSON.parse(raw) as StoredResult
+    if (raw) {
+      storedResult.value = JSON.parse(raw) as StoredResult
+      const baseUrl = storedResult.value.url_with_unlock || storedResult.value.url || `${window.location.origin}/view/${slug.value}`
+      addSite({
+        siteUrl: baseUrl,
+        title: storedResult.value.title,
+        createdAt: new Date().toISOString(),
+        expiresAt: storedResult.value.expires_at || null,
+      })
+    }
   } catch (_) {}
 })
 
@@ -18,9 +30,16 @@ const url = computed(() => {
   const s = slug.value
   if (!s) return ''
   if (import.meta.client) {
-    if (storedResult.value?.url_with_unlock) return storedResult.value.url_with_unlock
-    if (storedResult.value?.url) return storedResult.value.url
-    return `${window.location.origin}/view/${s}`
+    const base = storedResult.value?.url_with_unlock || storedResult.value?.url || `${window.location.origin}/view/${s}`
+    const title = storedResult.value?.title
+    if (title) {
+      try {
+        const u = new URL(base)
+        u.searchParams.set('title', title)
+        return u.toString()
+      } catch {}
+    }
+    return base
   }
   const req = useRequestURL()
   return `${req.origin}/view/${s}`

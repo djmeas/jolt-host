@@ -1,4 +1,6 @@
 <script setup lang="ts">
+useHead({ meta: [{ name: 'robots', content: 'noindex, nofollow' }] })
+
 const route = useRoute()
 const slug = route.params.slug as string
 const token = route.query.token as string | undefined

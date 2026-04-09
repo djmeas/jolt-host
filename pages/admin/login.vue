@@ -1,4 +1,6 @@
 <script setup lang="ts">
+useHead({ meta: [{ name: 'robots', content: 'noindex, nofollow' }] })
+
 const password = ref('')
 const error = ref<string | null>(null)
 const loading = ref(false)

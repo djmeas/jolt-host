@@ -7,6 +7,8 @@ useSeoMeta({
   ogTitle: 'Privacy Policy — Jolt Host',
   ogDescription: 'Read the Jolt Host Privacy Policy.',
 })
+
+useHead({ link: [{ rel: 'canonical', href: 'https://host.thunderjolt.app/privacy' }] })
 </script>
 
 <template>

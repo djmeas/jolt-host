@@ -6,6 +6,8 @@ useSeoMeta({
   ogDescription: 'Paste raw HTML and get an instant shareable URL. No login needed.',
 })
 
+useHead({ link: [{ rel: 'canonical', href: 'https://host.thunderjolt.app/paste' }] })
+
 const pasteUrl = '/api/paste'
 const html = ref('')
 const submitting = ref(false)
@@ -31,12 +33,14 @@ const expirationOptions = [
 ] as const
 const expiration = ref('1h')
 const password = ref('')
+const siteTitle = ref('')
 
 function saveResultToStorage(res: PasteResult) {
   if (import.meta.client) {
     try {
-      sessionStorage.setItem('jolthost-last-upload', JSON.stringify(res))
-      sessionStorage.setItem(`${RESULT_BY_SLUG_PREFIX}${res.slug}`, JSON.stringify(res))
+      const stored = { ...res, title: siteTitle.value.trim() || undefined }
+      sessionStorage.setItem('jolthost-last-upload', JSON.stringify(stored))
+      sessionStorage.setItem(`${RESULT_BY_SLUG_PREFIX}${res.slug}`, JSON.stringify(stored))
     } catch (_) {}
   }
 }
@@ -83,6 +87,7 @@ async function submitForm() {
         html: content,
         expiration: expiration.value,
         password: password.value.trim(),
+        title: siteTitle.value.trim() || undefined,
         ...(turnstileToken.value ? { 'cf-turnstile-response': turnstileToken.value } : {}),
       },
     })
@@ -128,6 +133,18 @@ async function submitForm() {
       </button>
 
       <div class="form-options">
+        <div class="form-group">
+          <label for="site-title" class="form-label">Title (optional)</label>
+          <input
+            id="site-title"
+            v-model="siteTitle"
+            type="text"
+            class="form-input"
+            placeholder="My awesome site"
+            maxlength="100"
+            :disabled="submitting"
+          />
+        </div>
         <div class="form-group">
           <label for="expiration" class="form-label">Expiration</label>
           <select

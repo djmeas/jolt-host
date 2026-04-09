@@ -6,6 +6,8 @@ useSeoMeta({
   ogDescription: 'Visually edit HTML text in your browser and publish with one click.',
 })
 
+useHead({ link: [{ rel: 'canonical', href: 'https://host.thunderjolt.app/editor' }] })
+
 import { prepareHtmlForEditor, cleanEditorHtml, useEditTracker } from '~/composables/useHtmlEditor'
 import { useEditorBridge } from '~/composables/useEditorBridge'
 import type { HoverPayload, SelectPayload } from '~/composables/useEditorBridge'

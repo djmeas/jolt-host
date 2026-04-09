@@ -7,3 +7,5 @@ Disallow: /api/
 Disallow: /dashboard
 Disallow: /dashboard/
 Disallow: /delete/
+
+Sitemap: https://host.thunderjolt.app/sitemap.xml

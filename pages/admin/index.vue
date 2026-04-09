@@ -1,4 +1,6 @@
 <script setup lang="ts">
+useHead({ meta: [{ name: 'robots', content: 'noindex, nofollow' }] })
+
 type Upload = {
   id: string
   slug: string

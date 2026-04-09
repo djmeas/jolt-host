@@ -6,6 +6,8 @@ useSeoMeta({
   ogDescription: 'Preview HTML live in a split-view editor. Paste or type HTML and see the result instantly.',
 })
 
+useHead({ link: [{ rel: 'canonical', href: 'https://host.thunderjolt.app/previewer' }] })
+
 const html = ref('')
 
 type FocusMode = 'balanced' | 'preview' | 'input'

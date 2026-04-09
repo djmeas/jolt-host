@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "test:unit": "vitest run server/",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:fixtures": "node scripts/build-test-fixtures.mjs"
+    "test:fixtures": "node scripts/build-test-fixtures.mjs",
+    "test:composables": "vitest run --config vitest.composables.config.ts"
   },
   "dependencies": {
     "fflate": "^0.8.2",
