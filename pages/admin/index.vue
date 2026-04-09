@@ -371,6 +371,38 @@ function toggleMenu(id: string) {
 }
 onMounted(() => document.addEventListener('click', () => { openMenuId.value = null }))
 onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value = null }))
+
+// Copy URL helpers
+const copiedSlug = ref<string | null>(null)
+const copiedType = ref<'url' | 'signed' | null>(null)
+
+function clearCopied() {
+  copiedSlug.value = null
+  copiedType.value = null
+}
+
+async function copyUrl(url: string, slug: string) {
+  try {
+    await navigator.clipboard.writeText(url)
+    copiedSlug.value = slug
+    copiedType.value = 'url'
+    setTimeout(clearCopied, 2000)
+  } catch {
+    alert('Failed to copy to clipboard')
+  }
+}
+
+async function copySignedUrl(slug: string) {
+  try {
+    const res = await $fetch<{ signedUrl: string }>(`/api/admin/paste/${slug}/sign`, { method: 'POST' })
+    await navigator.clipboard.writeText(res.signedUrl)
+    copiedSlug.value = slug
+    copiedType.value = 'signed'
+    setTimeout(clearCopied, 2000)
+  } catch {
+    alert('Failed to generate signed URL')
+  }
+}
 </script>
 
 <template>
@@ -450,7 +482,22 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
                 <tr v-for="(u, idx) in uploads" :key="u.id" :class="{ 'row-alt': idx % 2 === 1 }">
                   <td class="col-slug"><code class="slug-cell">{{ u.slug }}</code></td>
                   <td class="col-url">
-                    <a :href="u.url" target="_blank" rel="noopener" class="url-link" :title="u.url">View</a>
+                    <span class="url-actions">
+                      <a :href="u.url" target="_blank" rel="noopener" class="url-link" :title="u.url">View</a>
+                      <button
+                        type="button"
+                        class="copy-url-btn"
+                        :title="'Copy URL to clipboard'"
+                        @click="copyUrl(u.url, u.slug)"
+                      >{{ copiedSlug === u.slug && copiedType === 'url' ? 'Copied!' : 'Copy URL' }}</button>
+                      <button
+                        v-if="u.has_password"
+                        type="button"
+                        class="copy-url-btn copy-url-btn--signed"
+                        :title="'Copy pre-signed one-click view link'"
+                        @click="copySignedUrl(u.slug)"
+                      >{{ copiedSlug === u.slug && copiedType === 'signed' ? 'Copied!' : 'Copy Signed URL' }}</button>
+                    </span>
                   </td>
                   <td class="col-date muted">{{ formatDate(u.created_at) }}</td>
                   <td class="col-protected">
@@ -984,7 +1031,7 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
   background: rgba(255, 255, 255, 0.04);
 }
 .col-slug { min-width: 120px; }
-.col-url { min-width: 180px; }
+.col-url { min-width: 280px; }
 .col-date { min-width: 140px; white-space: nowrap; }
 .col-protected { min-width: 85px; }
 .col-expires { min-width: 140px; white-space: nowrap; }
@@ -1054,6 +1101,12 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
   border-radius: 4px;
   word-break: break-all;
 }
+.url-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
 .url-link {
   color: #a78bfa;
   text-decoration: none;
@@ -1065,6 +1118,31 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
 }
 .url-link:hover {
   text-decoration: underline;
+}
+.copy-url-btn {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.75rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: #a1a1aa;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.copy-url-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e4e4e7;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.copy-url-btn--signed {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.25);
+  color: #4ade80;
+}
+.copy-url-btn--signed:hover {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #22c55e;
 }
 .badge {
   display: inline-block;
