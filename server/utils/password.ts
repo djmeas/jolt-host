@@ -1,21 +1,50 @@
-import { scryptSync, randomBytes, timingSafeEqual } from 'crypto'
-
 const SALT_LEN = 16
 const KEY_LEN = 32
-const SCRYPT_N = 16384
-const SCRYPT_R = 8
-const SCRYPT_P = 1
+const ITERATIONS = 100_000
 
-export function hashPassword(password: string): string {
-  const salt = randomBytes(SALT_LEN).toString('base64url')
-  const key = scryptSync(password, salt, KEY_LEN, { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P })
-  return `${salt}:${key.toString('base64url')}`
+function toBase64Url(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf)
+  let binary = ''
+  for (const b of bytes) binary += String.fromCharCode(b)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-export function verifyPassword(password: string, stored: string): boolean {
-  const [salt, keyB64] = stored.split(':')
-  if (!salt || !keyB64) return false
-  const key = scryptSync(password, salt, KEY_LEN, { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P })
-  const keyStored = Buffer.from(keyB64, 'base64url')
-  return key.length === keyStored.length && timingSafeEqual(key, keyStored)
+function fromBase64Url(str: string): Uint8Array {
+  const base64 = str.replace(/-/g, '+').replace(/_/g, '/')
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_LEN))
+  const enc = new TextEncoder()
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits'])
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: ITERATIONS },
+    keyMaterial,
+    KEY_LEN * 8
+  )
+  return `${toBase64Url(salt.buffer)}:${toBase64Url(bits)}`
+}
+
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const [saltB64, keyB64] = stored.split(':')
+  if (!saltB64 || !keyB64) return false
+  const salt = fromBase64Url(saltB64)
+  const storedKey = fromBase64Url(keyB64)
+  const enc = new TextEncoder()
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits'])
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: ITERATIONS },
+    keyMaterial,
+    KEY_LEN * 8
+  )
+  const derived = new Uint8Array(bits)
+  if (derived.length !== storedKey.length) return false
+  // Constant-time comparison
+  let diff = 0
+  for (let i = 0; i < derived.length; i++) diff |= derived[i] ^ storedKey[i]
+  return diff === 0
 }

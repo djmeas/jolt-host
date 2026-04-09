@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Slug is required' })
   }
 
-  const upload = findUploadBySlug(slug)
+  const upload = await findUploadBySlug(event, slug)
   if (!upload) {
     throw createError({ statusCode: 404, message: 'Upload not found' })
   }
@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, message: 'Forbidden' })
   }
 
-  const user = findUserById(userId)
+  const user = await findUserById(event, userId)
   if (user && user.never_expire === 1) {
     throw createError({ statusCode: 403, message: 'Your account has never-expire enabled' })
   }
@@ -53,7 +53,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  updateExpirationBySlug(slug, expiresAt)
+  await updateExpirationBySlug(event, slug, expiresAt)
 
   return { ok: true }
 })

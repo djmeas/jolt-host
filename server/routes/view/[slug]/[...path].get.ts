@@ -1,8 +1,7 @@
-import { getRouterParam, getQuery, setHeader, sendStream, sendRedirect } from 'h3'
-import path from 'path'
-import { createReadStream, existsSync, statSync } from 'fs'
+import { getRouterParam, getQuery, setHeader, sendRedirect } from 'h3'
 import mime from 'mime-types'
-import { getStorageDir, findUploadBySlug } from '~/server/utils/db'
+import { useR2 } from '~/server/utils/cf'
+import { findUploadBySlug } from '~/server/utils/db'
 import { isViewAuthorized, setViewAuthCookie, validateUnlockToken } from '~/server/utils/view-auth'
 import { verifyPassword } from '~/server/utils/password'
 
@@ -13,7 +12,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: 'Not found' })
   }
 
-  const row = findUploadBySlug(slug)
+  const row = await findUploadBySlug(event, slug)
   if (!row) {
     throw createError({ statusCode: 404, message: 'Paste not found' })
   }
@@ -28,32 +27,45 @@ export default defineEventHandler(async (event) => {
       setViewAuthCookie(event, slug)
       return sendRedirect(event, `/view/${slug}/?unlock=${encodeURIComponent(unlockParam)}`, 302)
     }
-    if (passwordParam && verifyPassword(passwordParam, row.password_hash)) {
+    if (passwordParam && await verifyPassword(passwordParam, row.password_hash)) {
       setViewAuthCookie(event, slug)
       return sendRedirect(event, `/view/${slug}/`, 302)
     }
     return sendRedirect(event, `/view/${slug}/unlock`, 302)
   }
 
-  const storage = getStorageDir()
-  const baseDir = path.resolve(storage, path.dirname(row.entry_point))
   const requestedPath = pathParam || ''
-  const filePath = path.resolve(baseDir, requestedPath)
 
-  if (!filePath.startsWith(baseDir) || !existsSync(filePath)) {
+  // Prevent path traversal
+  if (requestedPath.includes('..') || requestedPath.startsWith('/')) {
     throw createError({ statusCode: 404, message: 'File not found' })
   }
 
-  if (statSync(filePath).isDirectory()) {
-    const indexInDir = path.join(filePath, 'index.html')
-    if (existsSync(indexInDir)) {
-      setHeader(event, 'Content-Type', 'text/html')
-      return sendStream(event, createReadStream(indexInDir))
-    }
-    throw createError({ statusCode: 404, message: 'Not found' })
+  // Resolve relative to the entry point's directory
+  const entryDir = row.entry_point.substring(0, row.entry_point.lastIndexOf('/'))
+  const r2Key = requestedPath ? `${entryDir}/${requestedPath}` : row.entry_point
+
+  // Ensure the key stays within the slug's namespace
+  if (!r2Key.startsWith(`${slug}/`)) {
+    throw createError({ statusCode: 404, message: 'File not found' })
   }
 
-  const mimeType = mime.lookup(filePath) || 'application/octet-stream'
+  const bucket = useR2(event)
+
+  // Try exact key first
+  let obj = await bucket.get(r2Key)
+
+  // If not found, try as directory with index.html
+  if (!obj) {
+    obj = await bucket.get(`${r2Key}/index.html`)
+    if (obj) {
+      setHeader(event, 'Content-Type', 'text/html')
+      return obj.body
+    }
+    throw createError({ statusCode: 404, message: 'File not found' })
+  }
+
+  const mimeType = obj.httpMetadata?.contentType || mime.lookup(requestedPath) || 'application/octet-stream'
   setHeader(event, 'Content-Type', mimeType)
-  return sendStream(event, createReadStream(filePath))
+  return obj.body
 })

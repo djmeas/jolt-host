@@ -71,11 +71,7 @@ export default defineNuxtConfig({
   },
   // @ts-expect-error - nitro is valid at runtime; schema types omit it (Nuxt 4 compat)
   nitro: {
+    preset: 'cloudflare-pages',
     output: { dir: '.output' },
-    experimental: { tasks: true },
-    scheduledTasks: {
-      // Run cleanup every 15 minutes
-      '*/15 * * * *': ['cleanup-expired'],
-    },
   },
 })

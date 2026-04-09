@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'User ID is required' })
   }
 
-  const user = findUserById(id)
+  const user = await findUserById(event, id)
   if (!user) {
     throw createError({ statusCode: 404, message: 'User not found' })
   }
@@ -21,18 +21,19 @@ export default defineEventHandler(async (event) => {
   const neverExpire = body?.never_expire !== undefined ? (body.never_expire === 1 || body.never_expire === true ? 1 : 0) : undefined
 
   if (name !== undefined || email !== undefined) {
-    updateUserNameEmail(id, name ?? user.name, email ?? user.email)
+    await updateUserNameEmail(event, id, name ?? user.name, email ?? user.email)
   }
 
   if (uploadMaxBytes !== undefined || neverExpire !== undefined) {
-    updateUserLimits(
+    await updateUserLimits(
+      event,
       id,
       uploadMaxBytes !== undefined ? uploadMaxBytes : user.upload_max_bytes,
       neverExpire !== undefined ? neverExpire : user.never_expire
     )
   }
 
-  const updated = findUserById(id)!
+  const updated = (await findUserById(event, id))!
   return {
     id: updated.id,
     name: updated.name,

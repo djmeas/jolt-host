@@ -35,12 +35,12 @@ const UNLOCK_HTML = (slug: string, error?: string) => `<!DOCTYPE html>
 </body>
 </html>`
 
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, 'slug')
   if (!slug) {
     throw createError({ statusCode: 404, message: 'Not found' })
   }
-  const row = findUploadBySlug(slug)
+  const row = await findUploadBySlug(event, slug)
   if (!row || !row.password_hash) {
     return sendRedirect(event, `/view/${slug}/`, 302)
   }
@@ -54,7 +54,7 @@ export default defineEventHandler((event) => {
     setViewAuthCookie(event, slug)
     return sendRedirect(event, `/view/${slug}/?unlock=${encodeURIComponent(unlockParam)}`, 302)
   }
-  if (passwordParam && verifyPassword(passwordParam, row.password_hash)) {
+  if (passwordParam && await verifyPassword(passwordParam, row.password_hash)) {
     setViewAuthCookie(event, slug)
     return sendRedirect(event, `/view/${slug}/`, 302)
   }

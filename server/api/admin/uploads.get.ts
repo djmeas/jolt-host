@@ -2,7 +2,7 @@ import { getQuery } from 'h3'
 import { requireAdmin } from '~/server/utils/admin-auth'
 import { getUploadsPaginated } from '~/server/utils/db'
 
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const query = getQuery(event)
   const page = Math.max(1, parseInt(String(query.page || 1), 10) || 1)
@@ -13,7 +13,7 @@ export default defineEventHandler((event) => {
   if (query.protected === 'yes') hasPassword = true
   else if (query.protected === 'no') hasPassword = false
 
-  const { items, total, page: p, limit: l } = getUploadsPaginated({
+  const { items, total, page: p, limit: l } = await getUploadsPaginated(event, {
     dateFrom,
     dateTo,
     hasPassword,

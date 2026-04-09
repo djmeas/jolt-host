@@ -36,6 +36,7 @@ coverage
 .cache
 .turbo
 .vercel
+.wrangler
 
 # Uploaded / generated content (remove this line if you want to track storage)
 storage/

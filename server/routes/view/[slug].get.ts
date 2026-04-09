@@ -1,8 +1,6 @@
-import { getRouterParam, getQuery, setHeader, sendStream, sendRedirect } from 'h3'
-import { join } from 'path'
-import { createReadStream, existsSync, readFileSync } from 'fs'
-import mime from 'mime-types'
-import { getStorageDir, findUploadBySlug } from '~/server/utils/db'
+import { getRouterParam, getQuery, setHeader, sendRedirect } from 'h3'
+import { useR2 } from '~/server/utils/cf'
+import { findUploadBySlug } from '~/server/utils/db'
 import { isViewAuthorized, setViewAuthCookie, validateUnlockToken } from '~/server/utils/view-auth'
 import { verifyPassword } from '~/server/utils/password'
 import { renderMarkdownPage } from '~/server/utils/markdown'
@@ -13,7 +11,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: 'Not found' })
   }
 
-  const row = findUploadBySlug(slug)
+  const row = await findUploadBySlug(event, slug)
   if (!row) {
     throw createError({ statusCode: 404, message: 'Paste not found' })
   }
@@ -27,22 +25,14 @@ export default defineEventHandler(async (event) => {
     if (unlockParam && validateUnlockToken(slug, unlockParam)) {
       setViewAuthCookie(event, slug)
       // Don't redirect — keep the unlock URL in the address bar so it can be bookmarked/shared
-    } else if (passwordParam && verifyPassword(passwordParam, row.password_hash)) {
+    } else if (passwordParam && await verifyPassword(passwordParam, row.password_hash)) {
       setViewAuthCookie(event, slug)
       return sendRedirect(event, `/view/${slug}/`, 302)
-    } else {
-      return sendRedirect(event, `/view/${slug}/unlock`, 302)
     }
+    return sendRedirect(event, `/view/${slug}/unlock`, 302)
   }
 
-  const storage = getStorageDir()
-  const filePath = join(storage, row.entry_point)
-  if (!existsSync(filePath)) {
-    throw createError({ statusCode: 404, message: 'File not found' })
-  }
-
-  // Redirect /view/slug → /view/slug/ so relative URLs in the HTML (e.g. assets/image.png)
-  // resolve to /view/slug/assets/image.png instead of /view/assets/image.png
+  // Redirect /view/slug → /view/slug/ so relative URLs in the HTML resolve correctly
   const url = getRequestURL(event)
   if (!url.pathname.endsWith('/')) {
     const location = url.pathname + '/' + (url.search || '')
@@ -50,15 +40,20 @@ export default defineEventHandler(async (event) => {
     return sendRedirect(event, location, 302)
   }
 
-  // Markdown files are rendered server-side into a full HTML page with theme switcher
+  const bucket = useR2(event)
+  const obj = await bucket.get(row.entry_point)
+  if (!obj) {
+    throw createError({ statusCode: 404, message: 'File not found' })
+  }
+
+  // If the entry point is a markdown file, render it as HTML
   if (row.entry_point.endsWith('.md')) {
-    const markdownSource = readFileSync(filePath, 'utf8')
-    const html = renderMarkdownPage(markdownSource)
-    setHeader(event, 'Content-Type', 'text/html; charset=utf-8')
+    const mdSource = await obj.text()
+    const html = renderMarkdownPage(mdSource)
+    setHeader(event, 'Content-Type', 'text/html')
     return html
   }
 
-  const mimeType = mime.lookup(filePath) || 'text/html'
-  setHeader(event, 'Content-Type', mimeType)
-  return sendStream(event, createReadStream(filePath))
+  setHeader(event, 'Content-Type', obj.httpMetadata?.contentType || 'text/html')
+  return obj.body
 })

@@ -13,18 +13,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'New password must be between 8 and 200 characters' })
   }
 
-  const user = findUserById(userId)
+  const user = await findUserById(event, userId)
   if (!user) {
     throw createError({ statusCode: 401, message: 'Unauthorized' })
   }
 
-  const valid = verifyPassword(currentPassword, user.password_hash)
+  const valid = await verifyPassword(currentPassword, user.password_hash)
   if (!valid) {
     throw createError({ statusCode: 401, message: 'Current password is incorrect' })
   }
 
-  const newHash = hashPassword(newPassword)
-  updateUserPassword(userId, newHash)
+  const newHash = await hashPassword(newPassword)
+  await updateUserPassword(event, userId, newHash)
 
   return { ok: true }
 })

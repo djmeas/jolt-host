@@ -1,9 +1,8 @@
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { marked } from 'marked'
 
-export default defineEventHandler(() => {
-  let md = readFileSync(join(process.cwd(), 'docs', 'privacy-policy.md'), 'utf-8')
+export default defineEventHandler(async () => {
+  const storage = useStorage('assets:server')
+  let md = await storage.getItem('docs:privacy-policy.md') as string || ''
 
   const supportEmail = process.env.SUPPORT_EMAIL
 

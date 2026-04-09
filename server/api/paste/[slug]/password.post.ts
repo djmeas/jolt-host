@@ -19,11 +19,11 @@ export default defineEventHandler(async (event) => {
   if (password.length > 200) {
     throw createError({ statusCode: 400, message: 'Password too long' })
   }
-  const row = findUploadBySlug(slug)
+  const row = await findUploadBySlug(event, slug)
   if (!row) {
     throw createError({ statusCode: 404, message: 'Paste not found' })
   }
-  const ok = updatePasswordBySlugAndOwnerToken(slug, ownerToken, hashPassword(password))
+  const ok = await updatePasswordBySlugAndOwnerToken(event, slug, ownerToken, await hashPassword(password))
   if (!ok) {
     throw createError({ statusCode: 403, message: 'Invalid owner token' })
   }

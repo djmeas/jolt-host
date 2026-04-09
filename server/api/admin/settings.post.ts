@@ -6,7 +6,7 @@ export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const body = await readBody(event).catch(() => ({}))
   if (typeof body?.authEnabled === 'boolean') {
-    setConfig('auth_enabled', body.authEnabled ? '1' : '0')
+    await setConfig(event, 'auth_enabled', body.authEnabled ? '1' : '0')
   }
   return { ok: true }
 })

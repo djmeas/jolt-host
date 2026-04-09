@@ -16,8 +16,8 @@ export function generateSlug(): string {
   return `${adj}-${noun}-${suffix}`
 }
 
-export function generateUniqueSlug(exists: (s: string) => boolean): string {
+export async function generateUniqueSlug(exists: (s: string) => Promise<boolean>): Promise<string> {
   let slug = generateSlug()
-  while (exists(slug)) slug = generateSlug()
+  while (await exists(slug)) slug = generateSlug()
   return slug
 }

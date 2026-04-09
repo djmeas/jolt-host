@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Slug is required' })
   }
 
-  const upload = findUploadBySlug(slug)
+  const upload = await findUploadBySlug(event, slug)
   if (!upload) {
     throw createError({ statusCode: 404, message: 'Upload not found' })
   }
@@ -23,10 +23,10 @@ export default defineEventHandler(async (event) => {
   const password = typeof body?.password === 'string' ? body.password.trim() : ''
 
   if (password.length > 0) {
-    const passwordHash = hashPassword(password)
-    updatePasswordBySlug(slug, passwordHash)
+    const passwordHash = await hashPassword(password)
+    await updatePasswordBySlug(event, slug, passwordHash)
   } else {
-    updatePasswordBySlug(slug, null)
+    await updatePasswordBySlug(event, slug, null)
   }
 
   return { ok: true }

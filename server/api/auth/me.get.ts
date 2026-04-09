@@ -1,9 +1,9 @@
 import { requireUser } from '~/server/utils/user-auth'
 import { findUserById } from '~/server/utils/db'
 
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   const userId = requireUser(event)
-  const user = findUserById(userId)
+  const user = await findUserById(event, userId)
   if (!user) {
     throw createError({ statusCode: 401, message: 'Unauthorized' })
   }

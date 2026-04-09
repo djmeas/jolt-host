@@ -1,9 +1,8 @@
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { marked } from 'marked'
 
-export default defineEventHandler(() => {
-  const md = readFileSync(join(process.cwd(), 'docs', 'how-to.md'), 'utf-8')
+export default defineEventHandler(async () => {
+  const storage = useStorage('assets:server')
+  const md = await storage.getItem('docs:how-to.md') as string || ''
   const html = marked.parse(md) as string
   return { html }
 })

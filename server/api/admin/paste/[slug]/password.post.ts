@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   if (!slug) {
     throw createError({ statusCode: 404, message: 'Not found' })
   }
-  const row = findUploadBySlug(slug)
+  const row = await findUploadBySlug(event, slug)
   if (!row) {
     throw createError({ statusCode: 404, message: 'Paste not found' })
   }
@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Password too long' })
   }
 
-  const passwordHash = password.length > 0 ? hashPassword(password) : null
-  updatePasswordBySlug(slug, passwordHash)
+  const passwordHash = password.length > 0 ? await hashPassword(password) : null
+  await updatePasswordBySlug(event, slug, passwordHash)
   return { ok: true }
 })

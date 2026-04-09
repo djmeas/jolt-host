@@ -14,17 +14,17 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Missing owner token' })
   }
 
-  const row = findUploadBySlug(slug)
+  const row = await findUploadBySlug(event, slug)
   if (!row) {
     throw createError({ statusCode: 404, message: 'Site not found' })
   }
 
-  const deleted = deleteUploadBySlugAndOwnerToken(slug, ownerToken)
+  const deleted = await deleteUploadBySlugAndOwnerToken(event, slug, ownerToken)
   if (!deleted) {
     throw createError({ statusCode: 403, message: 'Invalid owner token' })
   }
 
-  deleteStorageForSlug(slug)
+  await deleteStorageForSlug(event, slug)
 
   return { ok: true }
 })

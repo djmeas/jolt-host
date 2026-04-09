@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
   if (!ownerToken) {
     throw createError({ statusCode: 400, message: 'Missing owner token' })
   }
-  const row = findUploadBySlug(slug)
+  const row = await findUploadBySlug(event, slug)
   if (!row) {
     throw createError({ statusCode: 404, message: 'Paste not found' })
   }
@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
   if (expiration && expiresAt === null) {
     throw createError({ statusCode: 400, message: 'Invalid expiration value. Use 1h, 8h, 24h, 1w or empty for never.' })
   }
-  const ok = updateExpirationBySlugAndOwnerToken(slug, ownerToken, expiresAt)
+  const ok = await updateExpirationBySlugAndOwnerToken(event, slug, ownerToken, expiresAt)
   if (!ok) {
     throw createError({ statusCode: 403, message: 'Invalid owner token' })
   }

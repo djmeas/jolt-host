@@ -23,20 +23,20 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Password must be between 8 and 200 characters' })
   }
 
-  const existing = findUserByEmail(email)
+  const existing = await findUserByEmail(event, email)
   if (existing) {
     throw createError({ statusCode: 409, message: 'A user with this email already exists' })
   }
 
   const id = randomUUID()
-  const passwordHash = hashPassword(password)
-  insertUser(id, name, email, passwordHash)
+  const passwordHash = await hashPassword(password)
+  await insertUser(event, id, name, email, passwordHash)
 
   if (uploadMaxBytes !== null || neverExpire !== 0) {
-    updateUserLimits(id, uploadMaxBytes, neverExpire)
+    await updateUserLimits(event, id, uploadMaxBytes, neverExpire)
   }
 
-  const user = findUserById(id)!
+  const user = (await findUserById(event, id))!
   return {
     id: user.id,
     name: user.name,

@@ -3,24 +3,10 @@
  * Resets on server restart.
  */
 
-import { getRequestIP, getRequestHeader } from 'h3'
-import type { H3Event } from 'h3'
-
 const WINDOW_MS = 60 * 60 * 1000 // 1 hour
 const MAX_REQUESTS = 25
 
 const store = new Map<string, number[]>()
-
-/**
- * Extract the real client IP, preferring Cloudflare's CF-Connecting-IP header
- * when present (set by Cloudflare proxies), then falling back to X-Forwarded-For,
- * then the direct connection IP.
- */
-export function getClientIP(event: H3Event): string {
-  const cfIP = getRequestHeader(event, 'cf-connecting-ip')
-  if (cfIP?.trim()) return cfIP.trim()
-  return getRequestIP(event, { xForwardedFor: true }) ?? 'unknown'
-}
 
 function prune(ip: string) {
   const now = Date.now()

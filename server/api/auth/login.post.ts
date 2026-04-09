@@ -4,7 +4,7 @@ import { verifyPassword } from '~/server/utils/password'
 import { setUserCookie } from '~/server/utils/user-auth'
 
 export default defineEventHandler(async (event) => {
-  if (getConfig('auth_enabled', '0') !== '1') {
+  if ((await getConfig(event, 'auth_enabled', '0')) !== '1') {
     throw createError({ statusCode: 403, message: 'Login is currently disabled' })
   }
   const body = await readBody(event).catch(() => ({}))
@@ -15,12 +15,12 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, message: 'Invalid credentials' })
   }
 
-  const user = findUserByEmail(email)
+  const user = await findUserByEmail(event, email)
   if (!user) {
     throw createError({ statusCode: 401, message: 'Invalid credentials' })
   }
 
-  const valid = verifyPassword(password, user.password_hash)
+  const valid = await verifyPassword(password, user.password_hash)
   if (!valid) {
     throw createError({ statusCode: 401, message: 'Invalid credentials' })
   }

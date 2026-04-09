@@ -8,13 +8,13 @@ export default defineEventHandler(async (event) => {
   if (!slug) {
     throw createError({ statusCode: 404, message: 'Not found' })
   }
-  const row = findUploadBySlug(slug)
+  const row = await findUploadBySlug(event, slug)
   if (!row || !row.password_hash) {
     return sendRedirect(event, `/view/${slug}/`, 302)
   }
   const body = await readBody(event).catch(() => ({}))
   const password = typeof body?.password === 'string' ? body.password : ''
-  if (!verifyPassword(password, row.password_hash)) {
+  if (!(await verifyPassword(password, row.password_hash))) {
     setHeader(event, 'Content-Type', 'text/html; charset=utf-8')
     const html = `<!DOCTYPE html>
 <html lang="en">

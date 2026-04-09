@@ -5,7 +5,7 @@ import { insertUser, findUserByEmail, getConfig } from '~/server/utils/db'
 import { setUserCookie } from '~/server/utils/user-auth'
 
 export default defineEventHandler(async (event) => {
-  if (getConfig('auth_enabled', '0') !== '1') {
+  if ((await getConfig(event, 'auth_enabled', '0')) !== '1') {
     throw createError({ statusCode: 403, message: 'Registration is currently disabled' })
   }
   const body = await readBody(event).catch(() => ({}))
@@ -23,14 +23,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Password must be between 8 and 200 characters' })
   }
 
-  const existing = findUserByEmail(email)
+  const existing = await findUserByEmail(event, email)
   if (existing) {
     throw createError({ statusCode: 409, message: 'A user with this email already exists' })
   }
 
   const id = randomUUID()
-  const passwordHash = hashPassword(password)
-  insertUser(id, name, email, passwordHash)
+  const passwordHash = await hashPassword(password)
+  await insertUser(event, id, name, email, passwordHash)
   setUserCookie(event, id)
 
   return { ok: true, user: { id, name, email } }
