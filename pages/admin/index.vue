@@ -747,6 +747,28 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
       </section>
 
       <NuxtLink to="/" class="back-link">← Back to home</NuxtLink>
+
+      <!-- Expiration modal -->
+      <Teleport to="body">
+        <div v-if="expirationModalOpen" class="modal-backdrop" @click.self="closeExpirationModal">
+          <div class="modal" role="dialog" aria-modal="true">
+            <p class="modal-title">Set expiration for <code>{{ expirationModalSlug }}</code></p>
+            <div class="modal-body">
+              <label class="checkbox-label">
+                <input v-model="expirationNeverExpire" type="checkbox" :disabled="expirationLoading" />
+                Never expire
+              </label>
+            </div>
+            <p v-if="expirationError" class="modal-error">{{ expirationError }}</p>
+            <div class="modal-actions">
+              <button type="button" class="modal-cancel" :disabled="expirationLoading" @click="closeExpirationModal">Cancel</button>
+              <button type="button" class="modal-confirm" :disabled="expirationLoading" @click="saveExpiration">
+                {{ expirationLoading ? 'Saving…' : 'Save' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
     </div>
   </div>
 </template>
@@ -1411,5 +1433,83 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
 .toggle-input:checked + .toggle-track .toggle-thumb {
   transform: translateX(20px);
   background: #c4b5fd;
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal {
+  width: 100%;
+  max-width: 380px;
+  margin: 1rem;
+  background: #1c1c1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 1.5rem;
+}
+.modal-title {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e4e4e7;
+}
+.modal-title code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.modal-body {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: #a1a1aa;
+}
+.modal-error {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: #f87171;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+.modal-cancel {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.875rem;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: #a1a1aa;
+  cursor: pointer;
+}
+.modal-cancel:hover:not(:disabled) {
+  color: #e4e4e7;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.modal-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.modal-confirm {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.875rem;
+  background: rgba(167, 139, 250, 0.2);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  border-radius: 8px;
+  color: #c4b5fd;
+  cursor: pointer;
+}
+.modal-confirm:hover:not(:disabled) {
+  background: rgba(167, 139, 250, 0.3);
+}
+.modal-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>
