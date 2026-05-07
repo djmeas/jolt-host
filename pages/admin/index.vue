@@ -87,6 +87,12 @@ async function deletePaste(slug: string) {
 const editingPassword = ref<string | null>(null)
 const newPassword = ref('')
 
+const expirationModalOpen = ref(false)
+const expirationModalSlug = ref<string | null>(null)
+const expirationNeverExpire = ref(true)
+const expirationLoading = ref(false)
+const expirationError = ref<string | null>(null)
+
 async function updatePassword(slug: string) {
   try {
     await $fetch(`/api/admin/paste/${slug}/password`, {
@@ -104,6 +110,41 @@ async function updatePassword(slug: string) {
 function startEditPassword(slug: string) {
   editingPassword.value = slug
   newPassword.value = ''
+}
+
+function openExpirationModal(slug: string) {
+  expirationModalSlug.value = slug
+  expirationNeverExpire.value = true
+  expirationLoading.value = false
+  expirationError.value = null
+  expirationModalOpen.value = true
+}
+
+function closeExpirationModal() {
+  expirationModalOpen.value = false
+  expirationModalSlug.value = null
+  expirationNeverExpire.value = true
+  expirationLoading.value = false
+  expirationError.value = null
+}
+
+async function saveExpiration() {
+  if (!expirationModalSlug.value) return
+  expirationError.value = null
+  expirationLoading.value = true
+  try {
+    await $fetch(`/api/admin/upload/${expirationModalSlug.value}/expiration`, {
+      method: 'POST',
+      body: { expiresAt: expirationNeverExpire.value ? null : '' },
+    })
+    closeExpirationModal()
+    await refresh()
+  } catch (e: unknown) {
+    const err = e as { data?: { message?: string }; message?: string }
+    expirationError.value = err.data?.message ?? err.message ?? 'Failed to update expiration'
+  } finally {
+    expirationLoading.value = false
+  }
 }
 
 function goToPage(p: number) {
