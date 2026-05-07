@@ -468,6 +468,7 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
                         <button type="button" class="meatball-btn" @click.stop="toggleMenu(u.id)">⋯</button>
                         <div v-if="openMenuId === u.id" class="menu-dropdown">
                           <button type="button" class="menu-item" @click="startEditPassword(u.slug); openMenuId = null">{{ u.has_password ? 'Change password' : 'Set password' }}</button>
+                          <button type="button" class="menu-item" @click="openExpirationModal(u.slug); openMenuId = null">Set expiration</button>
                           <button type="button" class="menu-item danger" @click="deletePaste(u.slug); openMenuId = null">Delete</button>
                         </div>
                       </div>
