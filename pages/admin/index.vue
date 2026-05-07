@@ -87,6 +87,19 @@ async function deletePaste(slug: string) {
 const editingPassword = ref<string | null>(null)
 const newPassword = ref('')
 
+const {
+  isOpen: expirationModalOpen,
+  slug: expirationModalSlug,
+  neverExpire: expirationNeverExpire,
+  expirationDate,
+  isLoading: expirationLoading,
+  error: expirationError,
+  open: openExpirationModal,
+  close: closeExpirationModal,
+  save: saveExpiration,
+  defaultExpirationDate,
+} = useExpirationModal()
+
 async function updatePassword(slug: string) {
   try {
     await $fetch(`/api/admin/paste/${slug}/password`, {
@@ -366,11 +379,31 @@ async function saveSettings() {
 }
 
 const openMenuId = ref<string | null>(null)
-function toggleMenu(id: string) {
-  openMenuId.value = openMenuId.value === id ? null : id
+const menuPosition = ref<{ top: number, left: number } | null>(null)
+
+function toggleMenu(id: string, evt?: Event) {
+  if (openMenuId.value === id) {
+    openMenuId.value = null
+    menuPosition.value = null
+    return
+  }
+  openMenuId.value = id
+  if (evt?.currentTarget instanceof HTMLElement) {
+    const rect = evt.currentTarget.getBoundingClientRect()
+    menuPosition.value = {
+      top: rect.bottom + window.scrollY + 4,
+      left: rect.right + window.scrollX - 150,
+    }
+  }
 }
-onMounted(() => document.addEventListener('click', () => { openMenuId.value = null }))
-onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value = null }))
+
+function closeMenu() {
+  openMenuId.value = null
+  menuPosition.value = null
+}
+
+onMounted(() => document.addEventListener('click', closeMenu))
+onUnmounted(() => document.removeEventListener('click', closeMenu))
 </script>
 
 <template>
@@ -465,11 +498,14 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
                     </template>
                     <template v-else>
                       <div class="menu-wrapper">
-                        <button type="button" class="meatball-btn" @click.stop="toggleMenu(u.id)">⋯</button>
-                        <div v-if="openMenuId === u.id" class="menu-dropdown">
-                          <button type="button" class="menu-item" @click="startEditPassword(u.slug); openMenuId = null">{{ u.has_password ? 'Change password' : 'Set password' }}</button>
-                          <button type="button" class="menu-item danger" @click="deletePaste(u.slug); openMenuId = null">Delete</button>
-                        </div>
+                        <button type="button" class="meatball-btn" @click.stop="toggleMenu(u.id, $event)">⋯</button>
+                        <Teleport to="body" v-if="openMenuId === u.id && menuPosition">
+                          <div class="menu-dropdown" :style="{ position: 'fixed', top: menuPosition.top + 'px', left: menuPosition.left + 'px' }">
+                            <button type="button" class="menu-item" @click="startEditPassword(u.slug); closeMenu()">{{ u.has_password ? 'Change password' : 'Set password' }}</button>
+                            <button type="button" class="menu-item" @click="openExpirationModal(u.slug); closeMenu()">Set expiration</button>
+                            <button type="button" class="menu-item danger" @click="deletePaste(u.slug); closeMenu()">Delete</button>
+                          </div>
+                        </Teleport>
                       </div>
                     </template>
                   </td>
@@ -597,12 +633,14 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
                     <td class="muted">{{ formatDate(u.created_at) }}</td>
                     <td class="col-actions">
                       <div class="menu-wrapper">
-                        <button type="button" class="meatball-btn" :class="{ 'meatball-btn--active': editingUserId === u.id || resetPasswordUserId === u.id }" @click.stop="toggleMenu(u.id)">⋯</button>
-                        <div v-if="openMenuId === u.id" class="menu-dropdown">
-                          <button type="button" class="menu-item" @click="editingUserId === u.id ? (editingUserId = null) : (resetPasswordUserId = null, startEditUser(u)); openMenuId = null">{{ editingUserId === u.id ? 'Cancel edit' : 'Edit user' }}</button>
-                          <button type="button" class="menu-item" @click="resetPasswordUserId === u.id ? (resetPasswordUserId = null) : (editingUserId = null, startResetPassword(u.id)); openMenuId = null">{{ resetPasswordUserId === u.id ? 'Cancel reset' : 'Reset password' }}</button>
-                          <button type="button" class="menu-item danger" @click="deleteUser(u.id, u.name); openMenuId = null">Delete</button>
-                        </div>
+                        <button type="button" class="meatball-btn" :class="{ 'meatball-btn--active': editingUserId === u.id || resetPasswordUserId === u.id }" @click.stop="toggleMenu(u.id, $event)">⋯</button>
+                        <Teleport to="body" v-if="openMenuId === u.id && menuPosition">
+                          <div class="menu-dropdown" :style="{ position: 'fixed', top: menuPosition.top + 'px', left: menuPosition.left + 'px' }">
+                            <button type="button" class="menu-item" @click="editingUserId === u.id ? (editingUserId = null) : (resetPasswordUserId = null, startEditUser(u)); closeMenu()">{{ editingUserId === u.id ? 'Cancel edit' : 'Edit user' }}</button>
+                            <button type="button" class="menu-item" @click="resetPasswordUserId === u.id ? (resetPasswordUserId = null) : (editingUserId = null, startResetPassword(u.id)); closeMenu()">{{ resetPasswordUserId === u.id ? 'Cancel reset' : 'Reset password' }}</button>
+                            <button type="button" class="menu-item danger" @click="deleteUser(u.id, u.name); closeMenu()">Delete</button>
+                          </div>
+                        </Teleport>
                       </div>
                     </td>
                   </tr>
@@ -705,6 +743,38 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
       </section>
 
       <NuxtLink to="/" class="back-link">← Back to home</NuxtLink>
+
+      <!-- Expiration modal -->
+      <Teleport to="body">
+        <div v-if="expirationModalOpen" class="modal-backdrop" @click.self="closeExpirationModal">
+          <div class="modal" role="dialog" aria-modal="true">
+            <p class="modal-title">Set expiration for <code>{{ expirationModalSlug }}</code></p>
+            <div class="modal-body modal-body--expiration">
+              <label class="checkbox-label">
+                <input v-model="expirationNeverExpire" type="checkbox" :disabled="expirationLoading" />
+                Never expire
+              </label>
+              <div v-if="!expirationNeverExpire" class="date-picker-wrap">
+                <strong class="picker-title">Expires on</strong>
+                <input
+                  v-model="expirationDate"
+                  type="datetime-local"
+                  class="datetime-input"
+                  :disabled="expirationLoading"
+                  :min="defaultExpirationDate()"
+                />
+              </div>
+            </div>
+            <p v-if="expirationError" class="modal-error">{{ expirationError }}</p>
+            <div class="modal-actions">
+              <button type="button" class="modal-cancel" :disabled="expirationLoading" @click="closeExpirationModal">Cancel</button>
+              <button type="button" class="modal-confirm" :disabled="expirationLoading" @click="saveExpiration">
+                {{ expirationLoading ? 'Saving…' : 'Save' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
     </div>
   </div>
 </template>
@@ -1015,9 +1085,6 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
   color: #c4b5fd;
 }
 .menu-dropdown {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
   z-index: 200;
   background: #1c1c24;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1369,5 +1436,116 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
 .toggle-input:checked + .toggle-track .toggle-thumb {
   transform: translateX(20px);
   background: #c4b5fd;
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal {
+  width: 100%;
+  max-width: 380px;
+  margin: 1rem;
+  background: #1c1c1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 1.5rem;
+}
+.modal-title {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e4e4e7;
+}
+.modal-title code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.modal-body {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: #a1a1aa;
+}
+.modal-body--expiration {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.date-picker-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.picker-title {
+  font-size: 0.82rem;
+  color: #d4d4d8;
+  font-weight: 500;
+}
+.datetime-input {
+  padding: 0.45rem 0.6rem;
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: #d4d4d8;
+  width: 100%;
+}
+.datetime-input:focus {
+  outline: none;
+  border-color: rgba(167, 139, 250, 0.5);
+}
+/* Dark-theme calendar picker indicator */
+.datetime-input::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+  cursor: pointer;
+}
+.modal-error {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: #f87171;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+.modal-cancel {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.875rem;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: #a1a1aa;
+  cursor: pointer;
+}
+.modal-cancel:hover:not(:disabled) {
+  color: #e4e4e7;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.modal-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.modal-confirm {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.875rem;
+  background: rgba(167, 139, 250, 0.2);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  border-radius: 8px;
+  color: #c4b5fd;
+  cursor: pointer;
+}
+.modal-confirm:hover:not(:disabled) {
+  background: rgba(167, 139, 250, 0.3);
+}
+.modal-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>
