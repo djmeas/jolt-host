@@ -87,11 +87,18 @@ async function deletePaste(slug: string) {
 const editingPassword = ref<string | null>(null)
 const newPassword = ref('')
 
-const expirationModalOpen = ref(false)
-const expirationModalSlug = ref<string | null>(null)
-const expirationNeverExpire = ref(true)
-const expirationLoading = ref(false)
-const expirationError = ref<string | null>(null)
+const {
+  isOpen: expirationModalOpen,
+  slug: expirationModalSlug,
+  neverExpire: expirationNeverExpire,
+  expirationDate,
+  isLoading: expirationLoading,
+  error: expirationError,
+  open: openExpirationModal,
+  close: closeExpirationModal,
+  save: saveExpiration,
+  defaultExpirationDate,
+} = useExpirationModal()
 
 async function updatePassword(slug: string) {
   try {
@@ -110,41 +117,6 @@ async function updatePassword(slug: string) {
 function startEditPassword(slug: string) {
   editingPassword.value = slug
   newPassword.value = ''
-}
-
-function openExpirationModal(slug: string) {
-  expirationModalSlug.value = slug
-  expirationNeverExpire.value = true
-  expirationLoading.value = false
-  expirationError.value = null
-  expirationModalOpen.value = true
-}
-
-function closeExpirationModal() {
-  expirationModalOpen.value = false
-  expirationModalSlug.value = null
-  expirationNeverExpire.value = true
-  expirationLoading.value = false
-  expirationError.value = null
-}
-
-async function saveExpiration() {
-  if (!expirationModalSlug.value) return
-  expirationError.value = null
-  expirationLoading.value = true
-  try {
-    await $fetch(`/api/admin/upload/${expirationModalSlug.value}/expiration`, {
-      method: 'POST',
-      body: { expiresAt: expirationNeverExpire.value ? null : '' },
-    })
-    closeExpirationModal()
-    await refresh()
-  } catch (e: unknown) {
-    const err = e as { data?: { message?: string }; message?: string }
-    expirationError.value = err.data?.message ?? err.message ?? 'Failed to update expiration'
-  } finally {
-    expirationLoading.value = false
-  }
 }
 
 function goToPage(p: number) {
@@ -407,11 +379,31 @@ async function saveSettings() {
 }
 
 const openMenuId = ref<string | null>(null)
-function toggleMenu(id: string) {
-  openMenuId.value = openMenuId.value === id ? null : id
+const menuPosition = ref<{ top: number, left: number } | null>(null)
+
+function toggleMenu(id: string, evt?: Event) {
+  if (openMenuId.value === id) {
+    openMenuId.value = null
+    menuPosition.value = null
+    return
+  }
+  openMenuId.value = id
+  if (evt?.currentTarget instanceof HTMLElement) {
+    const rect = evt.currentTarget.getBoundingClientRect()
+    menuPosition.value = {
+      top: rect.bottom + window.scrollY + 4,
+      left: rect.right + window.scrollX - 150,
+    }
+  }
 }
-onMounted(() => document.addEventListener('click', () => { openMenuId.value = null }))
-onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value = null }))
+
+function closeMenu() {
+  openMenuId.value = null
+  menuPosition.value = null
+}
+
+onMounted(() => document.addEventListener('click', closeMenu))
+onUnmounted(() => document.removeEventListener('click', closeMenu))
 </script>
 
 <template>
@@ -506,12 +498,14 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
                     </template>
                     <template v-else>
                       <div class="menu-wrapper">
-                        <button type="button" class="meatball-btn" @click.stop="toggleMenu(u.id)">⋯</button>
-                        <div v-if="openMenuId === u.id" class="menu-dropdown">
-                          <button type="button" class="menu-item" @click="startEditPassword(u.slug); openMenuId = null">{{ u.has_password ? 'Change password' : 'Set password' }}</button>
-                          <button type="button" class="menu-item" @click="openExpirationModal(u.slug); openMenuId = null">Set expiration</button>
-                          <button type="button" class="menu-item danger" @click="deletePaste(u.slug); openMenuId = null">Delete</button>
-                        </div>
+                        <button type="button" class="meatball-btn" @click.stop="toggleMenu(u.id, $event)">⋯</button>
+                        <Teleport to="body" v-if="openMenuId === u.id && menuPosition">
+                          <div class="menu-dropdown" :style="{ position: 'fixed', top: menuPosition.top + 'px', left: menuPosition.left + 'px' }">
+                            <button type="button" class="menu-item" @click="startEditPassword(u.slug); closeMenu()">{{ u.has_password ? 'Change password' : 'Set password' }}</button>
+                            <button type="button" class="menu-item" @click="openExpirationModal(u.slug); closeMenu()">Set expiration</button>
+                            <button type="button" class="menu-item danger" @click="deletePaste(u.slug); closeMenu()">Delete</button>
+                          </div>
+                        </Teleport>
                       </div>
                     </template>
                   </td>
@@ -639,12 +633,14 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
                     <td class="muted">{{ formatDate(u.created_at) }}</td>
                     <td class="col-actions">
                       <div class="menu-wrapper">
-                        <button type="button" class="meatball-btn" :class="{ 'meatball-btn--active': editingUserId === u.id || resetPasswordUserId === u.id }" @click.stop="toggleMenu(u.id)">⋯</button>
-                        <div v-if="openMenuId === u.id" class="menu-dropdown">
-                          <button type="button" class="menu-item" @click="editingUserId === u.id ? (editingUserId = null) : (resetPasswordUserId = null, startEditUser(u)); openMenuId = null">{{ editingUserId === u.id ? 'Cancel edit' : 'Edit user' }}</button>
-                          <button type="button" class="menu-item" @click="resetPasswordUserId === u.id ? (resetPasswordUserId = null) : (editingUserId = null, startResetPassword(u.id)); openMenuId = null">{{ resetPasswordUserId === u.id ? 'Cancel reset' : 'Reset password' }}</button>
-                          <button type="button" class="menu-item danger" @click="deleteUser(u.id, u.name); openMenuId = null">Delete</button>
-                        </div>
+                        <button type="button" class="meatball-btn" :class="{ 'meatball-btn--active': editingUserId === u.id || resetPasswordUserId === u.id }" @click.stop="toggleMenu(u.id, $event)">⋯</button>
+                        <Teleport to="body" v-if="openMenuId === u.id && menuPosition">
+                          <div class="menu-dropdown" :style="{ position: 'fixed', top: menuPosition.top + 'px', left: menuPosition.left + 'px' }">
+                            <button type="button" class="menu-item" @click="editingUserId === u.id ? (editingUserId = null) : (resetPasswordUserId = null, startEditUser(u)); closeMenu()">{{ editingUserId === u.id ? 'Cancel edit' : 'Edit user' }}</button>
+                            <button type="button" class="menu-item" @click="resetPasswordUserId === u.id ? (resetPasswordUserId = null) : (editingUserId = null, startResetPassword(u.id)); closeMenu()">{{ resetPasswordUserId === u.id ? 'Cancel reset' : 'Reset password' }}</button>
+                            <button type="button" class="menu-item danger" @click="deleteUser(u.id, u.name); closeMenu()">Delete</button>
+                          </div>
+                        </Teleport>
                       </div>
                     </td>
                   </tr>
@@ -753,11 +749,21 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
         <div v-if="expirationModalOpen" class="modal-backdrop" @click.self="closeExpirationModal">
           <div class="modal" role="dialog" aria-modal="true">
             <p class="modal-title">Set expiration for <code>{{ expirationModalSlug }}</code></p>
-            <div class="modal-body">
+            <div class="modal-body modal-body--expiration">
               <label class="checkbox-label">
                 <input v-model="expirationNeverExpire" type="checkbox" :disabled="expirationLoading" />
                 Never expire
               </label>
+              <div v-if="!expirationNeverExpire" class="date-picker-wrap">
+                <strong class="picker-title">Expires on</strong>
+                <input
+                  v-model="expirationDate"
+                  type="datetime-local"
+                  class="datetime-input"
+                  :disabled="expirationLoading"
+                  :min="defaultExpirationDate()"
+                />
+              </div>
             </div>
             <p v-if="expirationError" class="modal-error">{{ expirationError }}</p>
             <div class="modal-actions">
@@ -1079,9 +1085,6 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
   color: #c4b5fd;
 }
 .menu-dropdown {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
   z-index: 200;
   background: #1c1c24;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1468,6 +1471,39 @@ onUnmounted(() => document.removeEventListener('click', () => { openMenuId.value
   margin: 0 0 1rem;
   font-size: 0.875rem;
   color: #a1a1aa;
+}
+.modal-body--expiration {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.date-picker-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.picker-title {
+  font-size: 0.82rem;
+  color: #d4d4d8;
+  font-weight: 500;
+}
+.datetime-input {
+  padding: 0.45rem 0.6rem;
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: #d4d4d8;
+  width: 100%;
+}
+.datetime-input:focus {
+  outline: none;
+  border-color: rgba(167, 139, 250, 0.5);
+}
+/* Dark-theme calendar picker indicator */
+.datetime-input::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+  cursor: pointer;
 }
 .modal-error {
   margin: 0 0 0.75rem;

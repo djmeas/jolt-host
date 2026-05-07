@@ -82,11 +82,31 @@ function buildUrl(slug: string) {
 }
 
 const openMenuSlug = ref<string | null>(null)
-function toggleMenu(slug: string) {
-  openMenuSlug.value = openMenuSlug.value === slug ? null : slug
+const menuPosition = ref<{ top: number; left: number } | null>(null)
+
+function toggleMenu(slug: string, evt?: Event) {
+  if (openMenuSlug.value === slug) {
+    openMenuSlug.value = null
+    menuPosition.value = null
+    return
+  }
+  openMenuSlug.value = slug
+  if (evt?.currentTarget instanceof HTMLElement) {
+    const rect = evt.currentTarget.getBoundingClientRect()
+    menuPosition.value = {
+      top: rect.bottom + window.scrollY + 4,
+      left: rect.right + window.scrollX - 150,
+    }
+  }
 }
-onMounted(() => document.addEventListener('click', () => { openMenuSlug.value = null }))
-onUnmounted(() => document.removeEventListener('click', () => { openMenuSlug.value = null }))
+
+function closeMenu() {
+  openMenuSlug.value = null
+  menuPosition.value = null
+}
+
+onMounted(() => document.addEventListener('click', closeMenu))
+onUnmounted(() => document.removeEventListener('click', closeMenu))
 
 // --- Per-row inline actions ---
 const editingPasswordSlug = ref<string | null>(null)
@@ -354,11 +374,13 @@ async function changePassword() {
                     <!-- Default actions -->
                     <template v-else>
                       <div class="menu-wrapper">
-                        <button type="button" class="meatball-btn" @click.stop="toggleMenu(u.slug)">⋯</button>
-                        <div v-if="openMenuSlug === u.slug" class="menu-dropdown">
-                          <button type="button" class="menu-item" @click="startEditPassword(u.slug); openMenuSlug = null">Change password</button>
-                          <button type="button" class="menu-item" @click="startEditExpiry(u.slug, u); openMenuSlug = null">Change expiry</button>
-                        </div>
+                        <button type="button" class="meatball-btn" @click.stop="toggleMenu(u.slug, $event)">⋯</button>
+                        <Teleport to="body" v-if="openMenuSlug === u.slug && menuPosition">
+                          <div class="menu-dropdown" :style="{ position: 'fixed', top: menuPosition.top + 'px', left: menuPosition.left + 'px' }">
+                            <button type="button" class="menu-item" @click="startEditPassword(u.slug); closeMenu()">Change password</button>
+                            <button type="button" class="menu-item" @click="startEditExpiry(u.slug, u); closeMenu()">Change expiry</button>
+                          </div>
+                        </Teleport>
                       </div>
                     </template>
                   </td>
@@ -614,9 +636,6 @@ async function changePassword() {
   border-color: rgba(255, 255, 255, 0.2);
 }
 .menu-dropdown {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
   z-index: 200;
   background: #1c1c24;
   border: 1px solid rgba(255, 255, 255, 0.12);
