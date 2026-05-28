@@ -1,6 +1,6 @@
 # JoltHost — Static Site Pastebin
 
-![1773207703303](image/README/1773207703303.png)
+<img width="1374" height="1112" alt="image" src="https://github.com/user-attachments/assets/338d5167-c9fd-4468-b2c8-8190d141a86f" />
 
 A minimal pastebin for static sites: upload an HTML file, paste raw HTML or Markdown, or upload a ZIP and get a shareable URL. Built with **Nuxt 3**, **SQLite** (better-sqlite3), and **Node fs**.
 
