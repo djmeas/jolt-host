@@ -2,10 +2,10 @@ import Database from 'better-sqlite3'
 import { join, dirname } from 'path'
 import { mkdirSync, existsSync } from 'fs'
 
-const STORAGE_DIR = process.env.NODE_ENV === 'test'
+const STORAGE_DIR = process.env.NODE_ENV === 'test' || process.env.JOLT_TEST_MODE === '1'
   ? join(process.cwd(), 'test', 'tmp-storage')
   : join(process.cwd(), 'storage')
-const DB_PATH = process.env.NODE_ENV === 'test'
+const DB_PATH = process.env.NODE_ENV === 'test' || process.env.JOLT_TEST_MODE === '1'
   ? join(process.cwd(), 'test', 'tmp-data', 'jolt.db')
   : join(process.cwd(), 'data', 'jolt.db')
 
@@ -72,10 +72,6 @@ function getDb(): Database.Database {
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE INDEX IF NOT EXISTS idx_api_tokens_nickname ON api_tokens(nickname);
-      CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      );
     `)
   }
   return db
@@ -385,16 +381,4 @@ export function getUploadsByUserId(userId: string, page: number, limit: number):
     'SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id, title FROM uploads WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
   ).all(userId, l, offset) as UploadRow[]
   return { items: rows, total }
-}
-
-// Site settings
-export function getConfig(key: string, defaultValue: string = ''): string {
-  const database = getDb()
-  const row = database.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined
-  return row?.value ?? defaultValue
-}
-
-export function setConfig(key: string, value: string): void {
-  const database = getDb()
-  database.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value)
 }

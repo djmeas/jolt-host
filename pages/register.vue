@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const { data: siteConfig } = await useFetch('/api/config')
-if (!siteConfig.value?.authEnabled) {
+if (!siteConfig.value?.registrationEnabled) {
   await navigateTo('/')
 }
 

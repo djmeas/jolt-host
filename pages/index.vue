@@ -1,14 +1,24 @@
 <script setup lang="ts">
+import { joinURL } from 'ufo'
+
+const { data: siteConfig } = await useFetch('/api/config')
+const landingPageEnabled = computed(() => siteConfig.value?.landingPageEnabled ?? true)
+const logoUrl = joinURL(useRuntimeConfig().app.baseURL, 'JoltSlashLogo.png')
+const { isLoggedIn, refresh } = useCurrentUser()
+if (landingPageEnabled.value && siteConfig.value?.registeredUsersOnly && !isLoggedIn.value) await refresh()
+const showUploader = computed(() => landingPageEnabled.value || isLoggedIn.value)
+
 useSeoMeta({
-  title: 'Upload a Static Site',
-  description: 'Upload an HTML file, Markdown, or ZIP and get an instant shareable URL. Free, no login required.',
+  title: computed(() => showUploader.value ? 'Upload a Static Site' : 'Jolt Host'),
+  description: computed(() => showUploader.value ? 'Upload an HTML file, Markdown, or ZIP and get an instant shareable URL.' : 'Jolt Host'),
   ogTitle: 'Jolt Host — Static Site Pastebin',
-  ogDescription: 'Upload an HTML file, Markdown, or ZIP and get an instant shareable URL. Free, no login required.',
+  ogDescription: computed(() => showUploader.value ? 'Upload an HTML file, Markdown, or ZIP and get an instant shareable URL.' : 'Jolt Host'),
 })
 
 useHead({ link: [{ rel: 'canonical', href: 'https://host.thunderjolt.app/' }] })
 
 const { charged } = useLightningCharge()
+const loginRequired = computed(() => siteConfig.value?.registeredUsersOnly && !isLoggedIn.value)
 const uploadUrl = '/api/upload'
 const fileInput = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
@@ -20,9 +30,9 @@ const RESULT_BY_SLUG_PREFIX = 'jolthost-result-'
 const turnstileContainer = ref<HTMLElement | null>(null)
 const { token: turnstileToken, isEnabled: turnstileEnabled, renderWidget, reset: resetTurnstile, cleanup: cleanupTurnstile } = useTurnstile()
 
-onMounted(() => {
-  if (turnstileContainer.value) renderWidget(turnstileContainer.value)
-})
+watch(turnstileContainer, (element) => {
+  if (element) renderWidget(element)
+}, { flush: 'post' })
 onUnmounted(() => cleanupTurnstile())
 
 type UploadResult = { url: string; slug: string; owner_token?: string; url_with_unlock?: string }
@@ -163,6 +173,7 @@ const preventDropNav = (e: DragEvent) => {
   }
 }
 onMounted(() => {
+  if (!showUploader.value) return
   document.addEventListener('drop', preventDropNav, true)
   document.addEventListener('dragover', preventDropNav, true)
 })
@@ -180,7 +191,11 @@ const boxPowered = ref(false)
 </script>
 
 <template>
-  <div class="page">
+  <div v-if="!showUploader" class="minimal-landing">
+    <img :src="logoUrl" alt="Jolt Host" class="minimal-logo" width="480" height="193" />
+    <a href="https://github.com/djmeas/jolt-host" target="_blank" rel="noopener noreferrer" class="minimal-github">GitHub</a>
+  </div>
+  <div v-else class="page">
     <div class="hero" ref="heroRef">
       <div class="hero-left">
         <p class="hero-eyebrow">Temporary Static Site Hosting</p>
@@ -222,7 +237,7 @@ const boxPowered = ref(false)
         </svg></span></h1>
         <p ref="heroBodyRef" class="hero-body">Upload an HTML file, static site ZIP, or Markdown and get a shareable URL — instantly.</p>
         <ul class="hero-perks">
-          <li><span class="perk-icon">⚡</span> No sign-up required</li>
+          <li><span class="perk-icon">⚡</span> {{ siteConfig?.registeredUsersOnly ? 'Account required to publish' : 'No sign-up required' }}</li>
           <li><span class="perk-icon">🚫</span> Zero ad tracking</li>
           <li><span class="perk-icon">🔒</span> Optional password protection</li>
           <li><span class="perk-icon">💸</span> Completely free</li>
@@ -238,6 +253,12 @@ const boxPowered = ref(false)
       <div class="hero-right">
         <div ref="boxRef" class="box" :class="{ 'box-powered': boxPowered }">
           <h2 class="title">Upload a static site</h2>
+      <div v-if="loginRequired" class="login-notice">
+        <p>Log in to publish a static site.</p>
+        <NuxtLink to="/login">Log in</NuxtLink>
+        <NuxtLink v-if="siteConfig?.registrationEnabled" to="/register">Create an account</NuxtLink>
+      </div>
+      <template v-else>
       <p class="subtitle">Choose an HTML file, Markdown, or ZIP<span class="zip-info-wrap"><span class="zip-info-icon" tabindex="0" aria-label="ZIP format requirements">ⓘ</span><span class="zip-info-tooltip" role="tooltip">Your ZIP must contain an <strong>index.html</strong> at the root of the archive. Nested HTML files and assets (images, CSS, JS) can be placed in subfolders.</span></span>, set options, then submit</p>
 
       <div
@@ -350,6 +371,7 @@ const boxPowered = ref(false)
         <p class="error">{{ error }}</p>
         <button type="button" class="error-dismiss" aria-label="Dismiss" @click="error = null">×</button>
       </div>
+      </template>
         </div><!-- .box -->
 
       </div><!-- .hero-right -->
@@ -366,6 +388,29 @@ const boxPowered = ref(false)
 </template>
 
 <style scoped>
+.minimal-landing {
+  width: 100%;
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+}
+.minimal-logo {
+  display: block;
+  width: min(100%, 480px);
+  height: auto;
+}
+.minimal-github {
+  color: #c4b5fd;
+  text-decoration: none;
+  font-size: 1rem;
+}
+.minimal-github:hover {
+  text-decoration: underline;
+}
+.login-notice a { display: inline-block; margin-right: 1rem; color: #a78bfa; }
 .page {
   width: 100%;
   display: flex;

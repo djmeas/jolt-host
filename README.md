@@ -47,6 +47,10 @@ For the **admin dashboard** at `/admin`, set an admin password (see [Environment
 - **Anonymous API uploads are disabled.** To create pastes/upload files you must use either:
   - **Web** — upload at `/`, paste HTML at `/paste`, or paste Markdown at `/markdown`; a session cookie is set so the browser can upload.
   - **API token** — create tokens in the admin dashboard; send `Authorization: Bearer jolt_xxxxxxxx...` on `POST /api/upload`, `POST /api/paste`, or `POST /api/markdown`.
+- Set **`REGISTERED_USERS_ONLY=true`** to enable login and require a logged-in user account for all three publishing endpoints. Anonymous web sessions and API tokens alone cannot upload in this mode. Registration is enabled by default; set **`ENABLE_REGISTRATION=false`** to prevent public sign-up while still allowing existing users and admin-created accounts to log in. Set a unique `JOLT_USER_SECRET` for signed user sessions.
+- Viewing is separate from publishing: sites without a password remain publicly accessible at `/view/[slug]` (including their assets), even when `REGISTERED_USERS_ONLY=true`. Password-protected sites still require the site password or unlock link; viewers do not need a registered account.
+- The `/dashboard` route accepts either a registered-user session (showing that user's uploads and account settings) or an admin session (showing all uploads). Admin credentials continue to use `/admin/login` and do not act as a registered-user session for publishing.
+- Set **`ENABLE_LANDING_PAGE=false`** to show visitors a minimal logo and GitHub link at `/`. Logged-in registered users still see the upload form there; login, admin, and public site links remain available.
 
 ## API
 
@@ -54,9 +58,9 @@ For the **admin dashboard** at `/admin`, set an admin password (see [Environment
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `POST` | `/api/upload` | Web session or API token | `multipart/form-data`: `file` (`.html`, `.md`, or `.zip`), optional `password`, `expiration` (`1h`, `8h`, `24h`, `1w`, `1d`). Returns `slug`, `url`, `entry_point`, `owner_token`, `url_with_owner_token`, and (if password set) `url_with_unlock`. |
-| `POST` | `/api/paste` | Web session or API token | JSON body: `html`, optional `password`, `expiration`. Same return shape as upload. |
-| `POST` | `/api/markdown` | Web session or API token | JSON body: `markdown`, optional `password`, `expiration`. Renders as a themed HTML page when viewed. Same return shape as upload. |
+| `POST` | `/api/upload` | Web session or API token; user login when restricted | `multipart/form-data`: `file` (`.html`, `.md`, or `.zip`), optional `password`, `expiration` (`1h`, `8h`, `24h`, `1w`, `1d`). Returns `slug`, `url`, `entry_point`, `owner_token`, `url_with_owner_token`, and (if password set) `url_with_unlock`. |
+| `POST` | `/api/paste` | Web session or API token; user login when restricted | JSON body: `html`, optional `password`, `expiration`. Same return shape as upload. |
+| `POST` | `/api/markdown` | Web session or API token; user login when restricted | JSON body: `markdown`, optional `password`, `expiration`. Renders as a themed HTML page when viewed. Same return shape as upload. |
 
 Upload size limit: default 25MB; set **`NUXT_JOLTHOST_UPLOAD_MAX_BYTES`** (bytes) to change (e.g. `52428800` for 50MB).
 
@@ -97,6 +101,10 @@ See [.env.example](.env.example). Main options:
 | `JOLT_VIEW_SECRET` | Secret for signing view/unlock cookies and tokens. |
 | `JOLT_ADMIN_SECRET` | Secret for admin session cookie (defaults to `JOLT_VIEW_SECRET`). |
 | `JOLT_WEB_SECRET` | Secret for web upload session cookie. |
+| `REGISTERED_USERS_ONLY` | Set to `true` to enable login and require a logged-in user for publishing; default `false`. |
+| `ENABLE_REGISTRATION` | Set to `false` to disable public sign-up when registered-only uploads are enabled; default `true`. |
+| `ENABLE_LANDING_PAGE` | Set to `false` to show visitors only the logo and GitHub link at `/`; logged-in users see the uploader. Default `true`. |
+| `JOLT_USER_SECRET` | Secret for signed user login cookies (set a unique value in production). |
 | `NUXT_JOLTHOST_UPLOAD_MAX_BYTES` | Max upload size in bytes (default 25MB). |
 
 ## Docker / VPS deployment

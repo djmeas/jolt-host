@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+.nuxt
+.output
+.nitro
+dist
+data
+storage
+test/tmp-*
+.env
+.env.*
+.git
+coverage
+*.log
+.DS_Store

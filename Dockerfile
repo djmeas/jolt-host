@@ -14,10 +14,6 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Nitro resolves static assets from server/chunks/ (relative to the bundle), not from .output/public.
-# Copy public assets so the runtime finds them at .output/server/chunks/public/
-RUN cp -r .output/public .output/server/chunks/public
-
 # Production stage
 FROM node:20-bookworm-slim AS runner
 

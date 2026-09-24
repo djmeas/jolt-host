@@ -6,8 +6,8 @@ type UploadRow = {
   entry_point: string
   created_at: string
   expires_at: string | null
-  password_hash: string | null
-  user_id: string
+  password_hash?: string | null
+  has_password?: boolean
 }
 
 type UploadsResponse = {
@@ -19,14 +19,11 @@ type UploadsResponse = {
 }
 
 const { user, isLoggedIn, refresh: refreshUser } = useCurrentUser()
+const { data: adminSession } = await useFetch('/api/admin/session', { key: 'admin-session' })
+const isAdmin = computed(() => adminSession.value?.authenticated ?? false)
 
-// Auth guard
-onMounted(async () => {
-  await refreshUser()
-  if (!isLoggedIn.value) {
-    await navigateTo('/login')
-  }
-})
+if (!isAdmin.value && !isLoggedIn.value) await refreshUser()
+if (!isAdmin.value && !isLoggedIn.value) await navigateTo('/login')
 
 const activeTab = ref<'uploads' | 'account'>('uploads')
 
@@ -40,7 +37,8 @@ async function fetchUploads() {
   uploadsLoading.value = true
   uploadsError.value = null
   try {
-    uploadsData.value = await $fetch<UploadsResponse>(`/api/user/uploads?page=${uploadsPage.value}&limit=20`)
+    const endpoint = isAdmin.value ? '/api/admin/uploads' : '/api/user/uploads'
+    uploadsData.value = await $fetch<UploadsResponse>(`${endpoint}?page=${uploadsPage.value}&limit=20`)
   } catch (e: unknown) {
     const err = e as { data?: { message?: string }; message?: string }
     uploadsError.value = err.data?.message ?? err.message ?? 'Failed to load uploads'
@@ -63,7 +61,7 @@ function goToUploadsPage(p: number) {
 }
 
 onMounted(() => {
-  fetchUploads()
+  if (isAdmin.value || isLoggedIn.value) fetchUploads()
 })
 
 const formatDate = (iso: string) => {
@@ -124,7 +122,8 @@ async function savePassword(slug: string, clearIt: boolean) {
   passwordSaving.value = true
   passwordError.value = null
   try {
-    await $fetch(`/api/user/uploads/${slug}/password`, {
+    const endpoint = isAdmin.value ? `/api/admin/paste/${slug}/password` : `/api/user/uploads/${slug}/password`
+    await $fetch(endpoint, {
       method: 'POST',
       body: { password: clearIt ? null : (inlinePassword.value || null) },
     })
@@ -151,7 +150,7 @@ const expiryOptions = computed(() => {
     { value: '24h', label: '24 hours' },
     { value: '1w', label: '1 week' },
   ]
-  if (user.value?.never_expire === 1) {
+  if (isAdmin.value || user.value?.never_expire === 1) {
     opts.push({ value: 'never', label: 'Never' })
   }
   return opts
@@ -198,12 +197,15 @@ function startEditExpiry(slug: string, upload: UploadRow) {
   expiryError.value = null
 }
 
-async function saveExpiry(slug: string) {
+async function saveExpiry(upload: UploadRow) {
   expirySaving.value = true
   expiryError.value = null
   try {
-    const expiresAt = inlineExpiry.value === 'never' ? null : inlineExpiry.value
-    await $fetch(`/api/user/uploads/${slug}/expiration`, {
+    const expiresAt = inlineExpiry.value === 'never' ? null : isAdmin.value
+      ? new Date(new Date(upload.created_at).getTime() + EXPIRY_OPTIONS_MS[inlineExpiry.value]).toISOString()
+      : inlineExpiry.value
+    const endpoint = isAdmin.value ? `/api/admin/upload/${upload.slug}/expiration` : `/api/user/uploads/${upload.slug}/expiration`
+    await $fetch(endpoint, {
       method: 'POST',
       body: { expiresAt },
     })
@@ -225,6 +227,10 @@ const confirmNewPassword = ref('')
 const passwordChangeLoading = ref(false)
 const passwordChangeError = ref<string | null>(null)
 const passwordChangeSuccess = ref(false)
+
+function isProtected(upload: UploadRow): boolean {
+  return upload.has_password ?? Boolean(upload.password_hash)
+}
 
 async function changePassword() {
   passwordChangeError.value = null
@@ -258,7 +264,8 @@ async function changePassword() {
     <div class="dashboard">
       <div class="header">
         <h1 class="title">Dashboard</h1>
-        <span v-if="user" class="header-user">{{ user.name }}</span>
+        <span v-if="isAdmin" class="header-user">Admin</span>
+        <span v-else-if="user" class="header-user">{{ user.name }}</span>
       </div>
 
       <div class="tabs">
@@ -268,9 +275,10 @@ async function changePassword() {
           :class="{ active: activeTab === 'uploads' }"
           @click="activeTab = 'uploads'"
         >
-          My Uploads
+          {{ isAdmin ? 'All Uploads' : 'My Uploads' }}
         </button>
         <button
+          v-if="!isAdmin"
           type="button"
           class="tab-btn"
           :class="{ active: activeTab === 'account' }"
@@ -287,7 +295,8 @@ async function changePassword() {
         <div v-if="uploadsLoading && !uploadsData" class="empty muted">Loading…</div>
 
         <div v-else-if="uploads.length === 0 && uploadsData" class="empty muted">
-          No uploads yet. <NuxtLink to="/" class="link">Upload your first site</NuxtLink>.
+          <template v-if="isAdmin">No uploads yet.</template>
+          <template v-else>No uploads yet. <NuxtLink to="/" class="link">Upload your first site</NuxtLink>.</template>
         </div>
 
         <div v-else-if="uploads.length > 0" class="uploads-section">
@@ -326,8 +335,8 @@ async function changePassword() {
                     <span v-else>Never</span>
                   </td>
                   <td class="col-protected">
-                    <span :class="['badge', u.password_hash ? 'badge-yes' : 'badge-no']">
-                      {{ u.password_hash ? 'Yes' : 'No' }}
+                    <span :class="['badge', isProtected(u) ? 'badge-yes' : 'badge-no']">
+                      {{ isProtected(u) ? 'Yes' : 'No' }}
                     </span>
                   </td>
                   <td class="col-actions">
@@ -362,7 +371,7 @@ async function changePassword() {
                             {{ opt.label }}
                           </option>
                         </select>
-                        <button type="button" class="action-btn" :disabled="expirySaving" @click="saveExpiry(u.slug)">
+                        <button type="button" class="action-btn" :disabled="expirySaving" @click="saveExpiry(u)">
                           Save
                         </button>
                         <button type="button" class="action-btn muted" @click="editingExpirySlug = null">
@@ -435,7 +444,7 @@ async function changePassword() {
       </section>
 
       <!-- Account Settings -->
-      <section v-if="activeTab === 'account'" class="section">
+      <section v-if="!isAdmin && activeTab === 'account'" class="section">
         <h2 class="section-title">Change password</h2>
         <div class="account-card">
           <form class="account-form" @submit.prevent="changePassword">

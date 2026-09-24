@@ -10,7 +10,7 @@ import { generateUniqueSlug } from '~/server/utils/slug'
 import { hashPassword } from '~/server/utils/password'
 import { createUnlockToken } from '~/server/utils/view-auth'
 import { checkUploadRateLimit, getClientIP } from '~/server/utils/rate-limit'
-import { isAuthorizedToUpload, hasValidApiToken } from '~/server/utils/upload-auth'
+import { requireUploadAuthorization, hasValidApiToken } from '~/server/utils/upload-auth'
 import { verifyTurnstileToken } from '~/server/utils/turnstile'
 import { getUserIdFromEvent } from '~/server/utils/user-auth'
 
@@ -38,13 +38,7 @@ function pathRelativeToStorage(absolutePath: string): string {
 }
 
 export default defineEventHandler(async (event) => {
-  if (!isAuthorizedToUpload(event)) {
-    throw createError({
-      statusCode: 401,
-      statusMessage: 'Unauthorized',
-      message: 'API token required for programmatic uploads. Use the web form at / or provide an API token in the Authorization header.',
-    })
-  }
+  requireUploadAuthorization(event)
 
   const ip = getClientIP(event)
   const { allowed, retryAfter } = checkUploadRateLimit(ip)

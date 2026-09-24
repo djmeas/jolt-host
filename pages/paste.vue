@@ -1,12 +1,17 @@
 <script setup lang="ts">
 useSeoMeta({
   title: 'Paste HTML',
-  description: 'Paste raw HTML and get an instant shareable URL. No login needed.',
+  description: 'Paste raw HTML and get an instant shareable URL.',
   ogTitle: 'Paste HTML — Jolt Host',
-  ogDescription: 'Paste raw HTML and get an instant shareable URL. No login needed.',
+  ogDescription: 'Paste raw HTML and get an instant shareable URL.',
 })
 
 useHead({ link: [{ rel: 'canonical', href: 'https://host.thunderjolt.app/paste' }] })
+
+const { data: siteConfig } = await useFetch('/api/config')
+const { isLoggedIn, refresh } = useCurrentUser()
+if (siteConfig.value?.registeredUsersOnly && !isLoggedIn.value) await refresh()
+const loginRequired = computed(() => siteConfig.value?.registeredUsersOnly && !isLoggedIn.value)
 
 const pasteUrl = '/api/paste'
 const html = ref('')
@@ -17,9 +22,9 @@ const RESULT_BY_SLUG_PREFIX = 'jolthost-result-'
 const turnstileContainer = ref<HTMLElement | null>(null)
 const { token: turnstileToken, isEnabled: turnstileEnabled, renderWidget, reset: resetTurnstile, cleanup: cleanupTurnstile } = useTurnstile()
 
-onMounted(() => {
-  if (turnstileContainer.value) renderWidget(turnstileContainer.value)
-})
+watch(turnstileContainer, (element) => {
+  if (element) renderWidget(element)
+}, { flush: 'post' })
 onUnmounted(() => cleanupTurnstile())
 
 type PasteResult = { url: string; slug: string; owner_token?: string; url_with_unlock?: string }
@@ -111,6 +116,12 @@ async function submitForm() {
   <div class="page">
     <div class="box">
       <h1 class="title">Paste HTML</h1>
+      <div v-if="loginRequired" class="login-notice">
+        <p>Log in to publish HTML.</p>
+        <NuxtLink to="/login">Log in</NuxtLink>
+        <NuxtLink v-if="siteConfig?.registrationEnabled" to="/register">Create an account</NuxtLink>
+      </div>
+      <template v-else>
       <p class="subtitle">Paste your HTML below, set options, then publish</p>
 
       <div class="textarea-wrap">
@@ -193,11 +204,13 @@ async function submitForm() {
       </div>
 
       <NuxtLink to="/" class="back-link">← Back to upload</NuxtLink>
+      </template>
     </div>
   </div>
 </template>
 
 <style scoped>
+.login-notice a { display: inline-block; margin-right: 1rem; color: #a78bfa; }
 .page {
   width: 100%;
   display: flex;

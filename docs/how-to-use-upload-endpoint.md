@@ -23,6 +23,8 @@ Authorization: Bearer jolt_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 Tokens are created in the admin dashboard at `/admin`.
 
+When `REGISTERED_USERS_ONLY=true`, log in before publishing. Register at `/register` if sign-up is enabled; when `ENABLE_REGISTRATION=false`, an admin must create your account. All three endpoints require a registered-user session cookie; web session cookies and API tokens alone cannot publish in this mode.
+
 ## `/api/upload` — File Upload
 
 **Content-Type:** `multipart/form-data`
@@ -188,7 +190,7 @@ All three endpoints return the same shape on success (200):
 | Status | Meaning |
 |--------|---------|
 | 400 | Missing or empty content, unsupported file format, invalid expiration, or password too long |
-| 401 | No valid web session or API token |
+| 401 | No valid web session or API token, or no registered-user session when `REGISTERED_USERS_ONLY=true` |
 | 413 | Content exceeds size limit |
 | 429 | Rate limit exceeded (check `Retry-After` header) |
 

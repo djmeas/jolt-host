@@ -71,6 +71,7 @@ const formatDate = (iso: string) => {
 
 async function logout() {
   await $fetch('/api/admin/logout', { method: 'POST' })
+  await refreshNuxtData('admin-session')
   await navigateTo('/admin/login')
 }
 
@@ -348,35 +349,7 @@ async function deleteUser(id: string, name: string) {
   }
 }
 
-const activeTab = ref<'uploads' | 'tokens' | 'users' | 'settings'>('uploads')
-
-// Settings
-const { data: settingsData, refresh: refreshSettings } = await useFetch<{ authEnabled: boolean }>('/api/admin/settings', { key: 'admin-settings' })
-const settingsAuthEnabled = ref(settingsData.value?.authEnabled ?? false)
-const settingsSaving = ref(false)
-const settingsSaved = ref(false)
-
-watch(settingsData, (val) => {
-  if (val) settingsAuthEnabled.value = val.authEnabled
-})
-
-async function saveSettings() {
-  settingsSaving.value = true
-  settingsSaved.value = false
-  try {
-    await $fetch('/api/admin/settings', {
-      method: 'POST',
-      body: { authEnabled: settingsAuthEnabled.value },
-    })
-    await refreshSettings()
-    settingsSaved.value = true
-    setTimeout(() => { settingsSaved.value = false }, 2000)
-  } catch {
-    alert('Failed to save settings')
-  } finally {
-    settingsSaving.value = false
-  }
-}
+const activeTab = ref<'uploads' | 'tokens' | 'users'>('uploads')
 
 const openMenuId = ref<string | null>(null)
 const menuPosition = ref<{ top: number, left: number } | null>(null)
@@ -424,9 +397,6 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
         </button>
         <button type="button" class="tab-btn" :class="{ active: activeTab === 'users' }" @click="activeTab = 'users'">
           Users
-        </button>
-        <button type="button" class="tab-btn" :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">
-          Settings
         </button>
       </div>
 
@@ -716,28 +686,6 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
               <button type="button" class="pagination-btn" :disabled="usersCurrentPage >= usersTotalPages" @click="goToUsersPage(usersCurrentPage + 1)">Next ›</button>
               <button type="button" class="pagination-btn" :disabled="usersCurrentPage >= usersTotalPages" title="Last page" @click="goToUsersPage(usersTotalPages)">»»</button>
             </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Settings tab -->
-      <section v-if="activeTab === 'settings'" class="section">
-        <h2 class="section-title">Site settings</h2>
-        <div class="settings-card">
-          <div class="settings-row">
-            <div class="settings-row-info">
-              <span class="settings-row-label">Login &amp; Registration</span>
-              <span class="settings-row-desc">Allow users to create accounts and log in.</span>
-            </div>
-            <label class="toggle">
-              <input type="checkbox" v-model="settingsAuthEnabled" class="toggle-input" />
-              <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            </label>
-          </div>
-          <div class="settings-actions">
-            <button type="button" class="save-btn" :disabled="settingsSaving" @click="saveSettings">
-              {{ settingsSaving ? 'Saving…' : settingsSaved ? 'Saved!' : 'Save settings' }}
-            </button>
           </div>
         </div>
       </section>
@@ -1348,94 +1296,6 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
   margin: 0.25rem 0 0;
   font-size: 0.8rem;
   color: #f87171;
-}
-.settings-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 1.25rem 1.5rem;
-  max-width: 480px;
-}
-.settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-.settings-row-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-.settings-row-label {
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: #e4e4e7;
-}
-.settings-row-desc {
-  font-size: 0.82rem;
-  color: #71717a;
-}
-.settings-actions {
-  margin-top: 1.25rem;
-  display: flex;
-  justify-content: flex-end;
-}
-.save-btn {
-  padding: 0.45rem 1rem;
-  font-size: 0.9rem;
-  font-weight: 500;
-  background: rgba(167, 139, 250, 0.2);
-  border: 1px solid rgba(167, 139, 250, 0.4);
-  border-radius: 6px;
-  color: #c4b5fd;
-  cursor: pointer;
-}
-.save-btn:hover:not(:disabled) {
-  background: rgba(167, 139, 250, 0.3);
-}
-.save-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.toggle {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.toggle-input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-.toggle-track {
-  width: 44px;
-  height: 24px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 999px;
-  transition: background 0.2s, border-color 0.2s;
-  display: flex;
-  align-items: center;
-  padding: 2px;
-}
-.toggle-input:checked + .toggle-track {
-  background: rgba(167, 139, 250, 0.4);
-  border-color: rgba(167, 139, 250, 0.6);
-}
-.toggle-thumb {
-  width: 18px;
-  height: 18px;
-  background: #a1a1aa;
-  border-radius: 50%;
-  transition: transform 0.2s, background 0.2s;
-}
-.toggle-input:checked + .toggle-track .toggle-thumb {
-  transform: translateX(20px);
-  background: #c4b5fd;
 }
 .modal-backdrop {
   position: fixed;

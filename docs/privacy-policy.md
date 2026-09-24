@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last updated:** April 2, 2026
+**Last updated:** September 24, 2026
 
 This policy explains what Jolt Host collects from people who use the service to host static sites, and how that information is handled.
 
@@ -24,10 +24,15 @@ When you upload a file, the content is stored on the server's disk inside a priv
 - Creation timestamp
 - Expiration timestamp (if you chose one)
 - A bcrypt hash of your password (if you chose to password-protect the upload)
-- A random owner token — this is returned to you at upload time and lets you delete your upload or change the password or expiry later. It is not linked to your identity.
+- A random owner token — this is returned to you at upload time and lets you delete your upload or change the password or expiry later.
 - A title (if you chose to enter one) — a short label stored alongside your upload record for reference
+- Your account ID, if you are logged in when you publish
 
 We do **not** store your original filename.
+
+### Accounts
+
+When registration is enabled, we store the name and email address you provide, a salted password hash, and account creation and update timestamps. We use this information to authenticate your account and associate your uploads with it.
 
 ### What we do not collect
 
@@ -66,6 +71,7 @@ Jolt Host sets the following first-party cookies:
 | Cookie | Purpose | Duration | Contains personal data? |
 |---|---|---|---|
 | `jolt_web` | Proves you arrived via the web form, allowing anonymous uploads without an API token | 24 hours | No — contains only a signed timestamp |
+| `jolt_user` | Keeps you logged in to your account | 30 days | Yes — contains your signed account ID |
 
 No third-party cookies are set. No tracking or advertising cookies are used.
 
@@ -148,7 +154,7 @@ If you are located in the European Economic Area (EEA) or the United Kingdom, ou
 - **Consent** — by using the service, you consent to the processing described in this policy
 - **Contractual necessity** — processing is necessary to provide the hosting service you request
 
-You have the right to access, rectify, erase, restrict, or port your personal data, and to object to processing. Because Jolt Host is designed for anonymous use, we can only exercise these rights to the extent that we can identify your data.
+You have the right to access, rectify, erase, restrict, or port your personal data, and to object to processing. For anonymous uploads, we can only exercise these rights to the extent that we can identify your data.
 
 ---
 
