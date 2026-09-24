@@ -1,10 +1,11 @@
 import { readBody } from 'h3'
-import { findUserByEmail, getConfig } from '~/server/utils/db'
+import { findUserByEmail } from '~/server/utils/db'
 import { verifyPassword } from '~/server/utils/password'
 import { setUserCookie } from '~/server/utils/user-auth'
+import { registeredUsersOnly } from '~/server/utils/upload-mode'
 
 export default defineEventHandler(async (event) => {
-  if (getConfig('auth_enabled', '0') !== '1') {
+  if (!registeredUsersOnly()) {
     throw createError({ statusCode: 403, message: 'Login is currently disabled' })
   }
   const body = await readBody(event).catch(() => ({}))

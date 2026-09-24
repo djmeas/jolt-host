@@ -30,7 +30,7 @@ export default async function setup() {
   const server = spawn('node', [join(root, '.output/server/index.mjs')], {
     cwd: root,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, PORT: port, NODE_ENV: 'test' },
+    env: { ...process.env, PORT: port, NODE_ENV: 'test', JOLT_TEST_MODE: '1', REGISTERED_USERS_ONLY: 'true', ENABLE_REGISTRATION: 'false', ENABLE_LANDING_PAGE: process.env.ENABLE_LANDING_PAGE ?? 'false', NUXT_JOLTHOST_ADMIN_PASSWORD: 'test-admin-password' },
   })
   await waitForPort(parseInt(port, 10), { retries: 30 })
   writeFileSync(envPath, JSON.stringify({ JOLT_TEST_URL: baseUrl }))

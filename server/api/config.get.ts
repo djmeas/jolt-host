@@ -1,7 +1,10 @@
-import { getConfig } from '~/server/utils/db'
+import { registeredUsersOnly, registrationEnabled } from '~/server/utils/upload-mode'
 
 export default defineEventHandler(() => {
   return {
-    authEnabled: getConfig('auth_enabled', '0') === '1',
+    authEnabled: registeredUsersOnly(),
+    registeredUsersOnly: registeredUsersOnly(),
+    registrationEnabled: registrationEnabled(),
+    landingPageEnabled: process.env.ENABLE_LANDING_PAGE !== 'false',
   }
 })

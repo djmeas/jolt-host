@@ -5,7 +5,8 @@ export const useCurrentUser = () => {
   const refresh = async () => {
     pending.value = true
     try {
-      const data = await $fetch<{ id: string, name: string, email: string, upload_max_bytes: number | null, never_expire: number, created_at: string }>('/api/auth/me')
+      const fetcher = import.meta.server ? useRequestFetch() : $fetch
+      const data = await fetcher<{ id: string, name: string, email: string, upload_max_bytes: number | null, never_expire: number, created_at: string }>('/api/auth/me')
       user.value = data
     } catch {
       user.value = null

@@ -1,12 +1,17 @@
 <script setup lang="ts">
 useSeoMeta({
   title: 'Paste Markdown',
-  description: 'Paste Markdown and publish it as a rendered webpage with a shareable link. No login needed.',
+  description: 'Paste Markdown and publish it as a rendered webpage with a shareable link.',
   ogTitle: 'Paste Markdown — Jolt Host',
   ogDescription: 'Paste Markdown and publish it as a rendered webpage with a shareable link.',
 })
 
 useHead({ link: [{ rel: 'canonical', href: 'https://host.thunderjolt.app/markdown' }] })
+
+const { data: siteConfig } = await useFetch('/api/config')
+const { isLoggedIn, refresh } = useCurrentUser()
+if (siteConfig.value?.registeredUsersOnly && !isLoggedIn.value) await refresh()
+const loginRequired = computed(() => siteConfig.value?.registeredUsersOnly && !isLoggedIn.value)
 
 const markdownUrl = '/api/markdown'
 const content = ref('')
@@ -17,9 +22,9 @@ const RESULT_BY_SLUG_PREFIX = 'jolthost-result-'
 const turnstileContainer = ref<HTMLElement | null>(null)
 const { token: turnstileToken, isEnabled: turnstileEnabled, renderWidget, reset: resetTurnstile, cleanup: cleanupTurnstile } = useTurnstile()
 
-onMounted(() => {
-  if (turnstileContainer.value) renderWidget(turnstileContainer.value)
-})
+watch(turnstileContainer, (element) => {
+  if (element) renderWidget(element)
+}, { flush: 'post' })
 onUnmounted(() => cleanupTurnstile())
 
 type PasteResult = { url: string; slug: string; owner_token?: string; url_with_unlock?: string }
@@ -110,6 +115,12 @@ async function submitForm() {
   <div class="page">
     <div class="box">
       <h1 class="title">Paste Markdown</h1>
+      <div v-if="loginRequired" class="login-notice">
+        <p>Log in to publish Markdown.</p>
+        <NuxtLink to="/login">Log in</NuxtLink>
+        <NuxtLink v-if="siteConfig?.registrationEnabled" to="/register">Create an account</NuxtLink>
+      </div>
+      <template v-else>
       <p class="subtitle">Paste your Markdown below, set options, then publish</p>
 
       <div class="textarea-wrap">
@@ -192,11 +203,13 @@ async function submitForm() {
       </div>
 
       <NuxtLink to="/" class="back-link">← Back to upload</NuxtLink>
+      </template>
     </div>
   </div>
 </template>
 
 <style scoped>
+.login-notice a { display: inline-block; margin-right: 1rem; color: #a78bfa; }
 .page {
   width: 100%;
   display: flex;

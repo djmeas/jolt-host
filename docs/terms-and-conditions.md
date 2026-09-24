@@ -1,6 +1,6 @@
 # Terms and Conditions
 
-**Last updated:** April 2026
+**Last updated:** September 24, 2026
 
 By using Jolt Host you agree to these terms. If you do not agree, do not use the service.
 
@@ -35,9 +35,9 @@ You are solely responsible for the content you upload and any consequences of ma
 
 ---
 
-## No registration required
+## Accounts
 
-Most features of Jolt Host do not require an account. Where accounts exist (e.g. dashboard access), you are responsible for keeping your credentials secure. Do not share your account or owner tokens with others.
+Publishing may require an account, depending on how Jolt Host is configured. You are responsible for keeping your credentials secure. Do not share your account or owner tokens with others.
 
 ---
 

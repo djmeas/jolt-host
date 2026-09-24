@@ -62,7 +62,7 @@ async function submit() {
         </button>
       </form>
       <p v-if="error" class="error">{{ error }}</p>
-      <p class="footer-link">
+      <p v-if="siteConfig?.registrationEnabled" class="footer-link">
         Don't have an account?
         <NuxtLink to="/register" class="link">Register</NuxtLink>
       </p>

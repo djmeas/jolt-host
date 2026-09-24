@@ -19,13 +19,17 @@ useHead({
 
 const { user, isLoggedIn, refresh } = useCurrentUser()
 const { data: siteConfig } = await useFetch('/api/config')
+if (route.path === '/' && siteConfig.value?.landingPageEnabled === false && !isLoggedIn.value) await refresh()
+const { data: adminSession, refresh: refreshAdminSession } = await useFetch('/api/admin/session', { key: 'admin-session' })
 const authEnabled = computed(() => siteConfig.value?.authEnabled ?? false)
+const minimalLanding = computed(() => route.path === '/' && siteConfig.value?.landingPageEnabled === false && !isLoggedIn.value)
 
 const { sites, load: loadMySites } = useMySites()
 const hasMySites = computed(() => sites.value.length > 0)
 
 onMounted(() => {
   refresh()
+  refreshAdminSession()
   loadMySites()
 })
 
@@ -36,15 +40,21 @@ async function logout() {
   await refresh()
   await navigateTo('/')
 }
+
+async function logoutAdmin() {
+  await $fetch('/api/admin/logout', { method: 'POST' })
+  await refreshAdminSession()
+  await navigateTo('/')
+}
 </script>
 
 <template>
   <Notivue v-slot="item">
     <Notification :item="item" />
   </Notivue>
-  <ClientOnly><LightningBackground /></ClientOnly>
+  <ClientOnly v-if="!minimalLanding"><LightningBackground /></ClientOnly>
   <div class="app">
-    <header class="navbar">
+    <header v-if="!minimalLanding" class="navbar">
       <div class="navbar-left">
         <NuxtLink to="/" class="navbar-brand" aria-label="Jolt Host home">
           <!-- <img
@@ -61,21 +71,27 @@ async function logout() {
         </ClientOnly>
       </div>
       <nav class="navbar-nav">
-        <template v-if="isLoggedIn">
+        <template v-if="adminSession?.authenticated">
+          <span class="navbar-username">Admin</span>
+          <NuxtLink to="/dashboard" class="navbar-nav-link">Dashboard</NuxtLink>
+          <NuxtLink to="/admin" class="navbar-nav-link">Admin</NuxtLink>
+          <button type="button" class="navbar-logout-btn" @click="logoutAdmin">Log out</button>
+        </template>
+        <template v-else-if="isLoggedIn">
           <span class="navbar-username" :title="user?.name">{{ user?.name }}</span>
           <NuxtLink to="/dashboard" class="navbar-nav-link">Dashboard</NuxtLink>
           <button type="button" class="navbar-logout-btn" @click="logout">Log out</button>
         </template>
         <template v-else-if="authEnabled">
           <NuxtLink to="/login" class="navbar-nav-link">Log in</NuxtLink>
-          <NuxtLink to="/register" class="navbar-nav-link navbar-nav-link--accent">Register</NuxtLink>
+          <NuxtLink v-if="siteConfig?.registrationEnabled" to="/register" class="navbar-nav-link navbar-nav-link--accent">Register</NuxtLink>
         </template>
       </nav>
     </header>
     <main class="main" :class="{ 'main--full': isFullWidth }">
       <NuxtPage />
     </main>
-    <footer class="footer">
+    <footer v-if="!minimalLanding" class="footer">
       <NuxtLink to="/how-to" class="footer-link">How to use</NuxtLink>
       <span class="footer-sep">·</span>
       <NuxtLink to="/privacy" class="footer-link">Privacy Policy</NuxtLink>

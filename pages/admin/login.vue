@@ -14,6 +14,7 @@ async function submit() {
       method: 'POST',
       body: { password: password.value },
     })
+    await refreshNuxtData('admin-session')
     await navigateTo('/admin')
   } catch (e: unknown) {
     const err = e as { data?: { message?: string }; message?: string }
