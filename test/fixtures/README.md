@@ -9,13 +9,18 @@ Static site fixtures used when testing the upload API.
 | `dummy.html` | Single HTML file upload (POST with `file` field) |
 | `dummy-site/` | Folder with `index.html` and `style.css` |
 | `dummy-site.zip` | ZIP archive of `dummy-site/` for ZIP upload tests |
+| `replacement-site.zip` | Replacement ZIP with `index.html` and `new-style.css` (no `style.css`) |
+| `nested-entry-site.zip` | ZIP whose only entry point is `pages/home.html` |
+| `escape-site.zip` | Malicious ZIP with a `../../escape.txt` entry (rejected) |
+| `no-html.zip` | ZIP with no HTML entry point (rejected) |
 
-## Rebuilding the ZIP
+## Rebuilding the fixtures
 
-If you modify files in `dummy-site/`, rebuild the ZIP:
+If you modify files in `dummy-site/`, rebuild the ZIPs:
 
 ```bash
 npm run test:fixtures
+node scripts/build-escape-fixture.mjs   # malicious path-escaping ZIP
 ```
 
 ## Integration tests

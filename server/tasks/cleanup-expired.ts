@@ -1,5 +1,5 @@
-import { getExpiredUploadSlugs, deleteUploadBySlug } from '~/server/utils/db'
-import { deleteStorageForSlug } from '~/server/utils/storage'
+import { getExpiredUploadSlugs, deleteUploadBySlug, getAllUploadEntryPoints } from '~/server/utils/db'
+import { deleteStorageForSlug, pruneTrash, pruneStaging, reconcileContent } from '~/server/utils/storage'
 
 export default defineTask({
   meta: {
@@ -16,6 +16,13 @@ export default defineTask({
       } catch (e) {
         console.error(`[cleanup-expired] Failed to delete slug ${slug}:`, e)
       }
+    }
+    try {
+      pruneTrash()
+      pruneStaging()
+      reconcileContent(getAllUploadEntryPoints())
+    } catch (e) {
+      console.error('[cleanup-expired] Failed to reconcile stored content:', e)
     }
     return { deleted, total: slugs.length }
   },

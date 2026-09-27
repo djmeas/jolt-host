@@ -103,6 +103,11 @@ function closeMenu() {
   menuPosition.value = null
 }
 
+function goToUpdate(slug: string) {
+  closeMenu()
+  navigateTo(`/update/${slug}`)
+}
+
 onMounted(() => document.addEventListener('click', closeMenu))
 onUnmounted(() => document.removeEventListener('click', closeMenu))
 
@@ -388,6 +393,7 @@ async function changePassword() {
                           <div class="menu-dropdown" :style="{ position: 'fixed', top: menuPosition.top + 'px', left: menuPosition.left + 'px' }">
                             <button type="button" class="menu-item" @click="startEditPassword(u.slug); closeMenu()">Change password</button>
                             <button type="button" class="menu-item" @click="startEditExpiry(u.slug, u); closeMenu()">Change expiry</button>
+                            <button type="button" class="menu-item" @click="goToUpdate(u.slug)">Replace files</button>
                           </div>
                         </Teleport>
                       </div>

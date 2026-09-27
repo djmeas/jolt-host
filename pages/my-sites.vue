@@ -19,6 +19,16 @@ function formatDate(iso: string | null): string {
   })
 }
 
+function slugFromUrl(url: string): string | null {
+  try {
+    const base = import.meta.client ? window.location.origin : 'http://localhost'
+    const match = new URL(url, base).pathname.match(/\/view\/([^/]+)\/?$/)
+    return match?.[1] ?? null
+  } catch {
+    return null
+  }
+}
+
 function confirmClear() {
   clearSites()
   showConfirm.value = false
@@ -64,6 +74,13 @@ function confirmClear() {
               <span class="meta-value">{{ formatDate(site.expiresAt) }}</span>
             </span>
           </div>
+          <NuxtLink
+            v-if="slugFromUrl(site.siteUrl)"
+            :to="`/update/${slugFromUrl(site.siteUrl)}`"
+            class="site-replace"
+          >
+            Replace files
+          </NuxtLink>
         </li>
       </ul>
 
@@ -190,6 +207,20 @@ function confirmClear() {
 }
 .site-url:hover {
   text-decoration: underline;
+}
+.site-replace {
+  align-self: flex-start;
+  margin-top: 0.25rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  color: #c4b5fd;
+  text-decoration: none;
+  background: rgba(167, 139, 250, 0.12);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-radius: 6px;
+}
+.site-replace:hover {
+  background: rgba(167, 139, 250, 0.22);
 }
 .site-meta {
   display: flex;

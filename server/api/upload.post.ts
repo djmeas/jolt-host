@@ -1,10 +1,7 @@
 import { readMultipartFormData, setResponseHeader } from 'h3'
-import { createWriteStream, mkdirSync, existsSync } from 'fs'
+import { mkdirSync, existsSync } from 'fs'
 import path from 'path'
-import { pipeline } from 'stream/promises'
-import { Readable } from 'stream'
 import { randomUUID, randomBytes } from 'crypto'
-import unzipper from 'unzipper'
 import { getStorageDir, insertUpload, slugExists, findUserById } from '~/server/utils/db'
 import { generateUniqueSlug } from '~/server/utils/slug'
 import { hashPassword } from '~/server/utils/password'
@@ -13,6 +10,7 @@ import { checkUploadRateLimit, getClientIP } from '~/server/utils/rate-limit'
 import { requireUploadAuthorization, hasValidApiToken } from '~/server/utils/upload-auth'
 import { verifyTurnstileToken } from '~/server/utils/turnstile'
 import { getUserIdFromEvent } from '~/server/utils/user-auth'
+import { writeUploadContent, isAcceptedUploadFilename, resolveUploadMaxBytes } from '~/server/utils/upload-content'
 
 const STORAGE = getStorageDir()
 
@@ -100,29 +98,23 @@ export default defineEventHandler(async (event) => {
   }
 
   const filename = (file.filename || 'file').toLowerCase()
-  const config = useRuntimeConfig()
-  const isApi = hasValidApiToken(event)
-  const isZip = filename.endsWith('.zip')
-  let maxBytes: number
-  if (user && user.upload_max_bytes !== null) {
-    maxBytes = user.upload_max_bytes
-  } else if (isApi) {
-    maxBytes = 100 * 1024 * 1024
-  } else if (isZip) {
-    maxBytes = 5 * 1024 * 1024
-  } else {
-    maxBytes = config.jolthost?.uploadMaxBytes ?? 25 * 1024 * 1024
+  if (!isAcceptedUploadFilename(filename)) {
+    throw createError({ statusCode: 400, message: 'Only .html, .zip, or .md files are allowed' })
   }
+
+  const config = useRuntimeConfig()
+  const maxBytes = resolveUploadMaxBytes({
+    userMaxBytes: user?.upload_max_bytes ?? null,
+    isApi: hasValidApiToken(event),
+    isZip: filename.endsWith('.zip'),
+    configMaxBytes: config.jolthost?.uploadMaxBytes ?? 25 * 1024 * 1024,
+  })
   const fileSize = Buffer.isBuffer(file.data) ? file.data.length : (file.data as Uint8Array).length
   if (fileSize > maxBytes) {
     throw createError({
       statusCode: 413,
       message: `File too large. Maximum size is ${Math.round(maxBytes / 1024 / 1024)}MB.`,
     })
-  }
-
-  if (!filename.endsWith('.html') && !filename.endsWith('.zip') && !filename.endsWith('.md')) {
-    throw createError({ statusCode: 400, message: 'Only .html, .zip, or .md files are allowed' })
   }
 
   const slug = generateUniqueSlug(slugExists)
@@ -134,49 +126,9 @@ export default defineEventHandler(async (event) => {
     mkdirSync(uploadDir, { recursive: true })
   }
 
-  let entryPoint: string
-
-  if (filename.endsWith('.html')) {
-    const outPath = path.join(uploadDir, 'index.html')
-    await pipeline(
-      Readable.from(file.data),
-      createWriteStream(outPath)
-    )
-    entryPoint = pathRelativeToStorage(outPath)
-  } else if (filename.endsWith('.md')) {
-    const outPath = path.join(uploadDir, 'index.md')
-    await pipeline(
-      Readable.from(file.data),
-      createWriteStream(outPath)
-    )
-    entryPoint = pathRelativeToStorage(outPath)
-  } else {
-    const buffer = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data as ArrayBuffer)
-    let directory: Awaited<ReturnType<typeof unzipper.Open.buffer>>
-    try {
-      directory = await unzipper.Open.buffer(buffer)
-    } catch (err) {
-      throw createError({
-        statusCode: 400,
-        message: 'Invalid or corrupted ZIP file.',
-      })
-    }
-    await directory.extract({ path: uploadDir })
-
-    const htmlEntries = directory.files
-      .filter((e) => e.type !== 'Directory' && e.path.toLowerCase().endsWith('.html'))
-      .map((e) => e.path.replace(/\\/g, '/').replace(/^\/+/, ''))
-      .sort((a, b) => {
-        if (a.toLowerCase() === 'index.html') return -1
-        if (b.toLowerCase() === 'index.html') return 1
-        return a.localeCompare(b)
-      })
-    const entryFile = htmlEntries[0]
-    if (!entryFile) {
-      throw createError({ statusCode: 400, message: 'ZIP must contain at least one .html file' })
-    }
-    entryPoint = pathRelativeToStorage(path.join(uploadDir, entryFile))
-  }
+  const data = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data as ArrayBuffer)
+  const entryFile = await writeUploadContent(data, filename, uploadDir)
+  const entryPoint = pathRelativeToStorage(path.join(uploadDir, entryFile))
 
   insertUpload(id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId, title || null)
 

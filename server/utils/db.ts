@@ -118,6 +118,31 @@ export function updateExpirationBySlugAndOwnerToken(slug: string, ownerToken: st
   return info.changes === 1
 }
 
+/**
+ * Switches a site's entry point only when it still matches the value observed
+ * before preparation and the row has not expired. The affected-row count is the
+ * publication switch: callers treat a `false` result as a conflict.
+ */
+export function updateEntryPointIfUnchanged(
+  slug: string,
+  expectedEntryPoint: string,
+  newEntryPoint: string
+): boolean {
+  const database = getDb()
+  const info = database.prepare(
+    `UPDATE uploads SET entry_point = ?
+     WHERE slug = ? AND entry_point = ?
+       AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`
+  ).run(newEntryPoint, slug, expectedEntryPoint)
+  return info.changes === 1
+}
+
+/** Returns slug/entry_point for every upload; used to reconcile stored content. */
+export function getAllUploadEntryPoints(): { slug: string; entry_point: string }[] {
+  const database = getDb()
+  return database.prepare('SELECT slug, entry_point FROM uploads').all() as { slug: string; entry_point: string }[]
+}
+
 export type UserRow = {
   id: string
   name: string

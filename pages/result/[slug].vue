@@ -51,6 +51,8 @@ const deleteUrl = computed(() => {
   return `/delete/${slug.value}?token=${encodeURIComponent(token)}`
 })
 
+const updateUrl = computed(() => `/update/${slug.value}`)
+
 const copied = ref(false)
 
 async function copyUrl() {
@@ -75,6 +77,9 @@ async function copyUrl() {
         <button type="button" class="copy" @click="copyUrl">
           {{ copied ? 'Copied!' : 'Copy URL' }}
         </button>
+      </div>
+      <div>
+        <NuxtLink :to="updateUrl" class="update-link">Replace files</NuxtLink>
       </div>
       <div>
         <NuxtLink to="/" class="back-link">← Upload another site</NuxtLink>
@@ -158,6 +163,16 @@ async function copyUrl() {
 }
 .back-link:hover {
   color: #a78bfa;
+}
+.update-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  color: #c4b5fd;
+  text-decoration: none;
+}
+.update-link:hover {
+  text-decoration: underline;
 }
 .delete-wrap {
   margin-top: 1.5rem;

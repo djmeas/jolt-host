@@ -9,6 +9,7 @@ Upload HTML files, Markdown files, or ZIP archives — or paste raw HTML/Markdow
 | `POST /api/upload` | `multipart/form-data` | Upload an `.html`, `.md`, or `.zip` file |
 | `POST /api/paste` | `application/json` | Paste raw HTML as a hosted page |
 | `POST /api/markdown` | `application/json` | Paste raw Markdown as a rendered, themed page |
+| `PUT /api/uploads/[slug]/content` | `multipart/form-data` | Replace the entire published file set of an existing site |
 
 ## Authentication
 
@@ -64,6 +65,80 @@ When `REGISTERED_USERS_ONLY=true`, log in before publishing. Register at `/regis
 | `expiration` | String | No       | Auto-delete after: `1h`, `8h`, `24h`, `1w`, `1d`                    |
 
 Markdown pastes are rendered server-side and displayed with a floating theme switcher (GitHub, Dracula, Solarized, Nord). The viewer's theme preference is stored in `localStorage`.
+
+## `PUT /api/uploads/[slug]/content` — Replace a site
+
+Replaces the **entire** published file set for an existing site while keeping its row, slug, and `/view/[slug]` URL. Files omitted from the replacement stop being served; there is no version history or rollback.
+
+**Content-Type:** `multipart/form-data`
+
+| Field         | Type   | Required | Description                                                                 |
+|---------------|--------|----------|-----------------------------------------------------------------------------|
+| `file`        | File   | Yes      | An `.html` file, `.md` file, or `.zip` archive containing the full new site |
+| `owner_token` | String | No       | The site's owner token, when ownership is not proven by a login or admin session |
+
+**What stays the same:** the slug, `/view/[slug]` URL, title, password (and its unlock link), owner token, `created_at`, and `expires_at`. Updating content does not restart expiration and never issues a new owner token. The response contains only `slug`, `url`, and `entry_point` — the owner token is never echoed back.
+
+**What changes:** the stored file set and the `entry_point`. A ZIP's entry point is chosen the same way as at creation (`index.html` at the root first, otherwise the first HTML file alphabetically, including nested paths).
+
+**Authorization**
+
+- A signed-in user can update a site they own.
+- An admin session can update any site.
+- In open publishing mode (default), a site's owner token authorizes an update.
+- A web upload session or a general API token is **not** ownership proof and cannot update someone else's site.
+- With `REGISTERED_USERS_ONLY=true`, an owner token alone is insufficient: a logged-in user is still required. For an older anonymous upload in that mode, both a login and its owner token are required.
+
+Pass `owner_token` as a form field, never in the URL or query string.
+
+**Limits**
+
+- Same size policy as creation: per-user limit, then 100MB for API uploads, 5MB for anonymous ZIPs, otherwise `NUXT_JOLTHOST_UPLOAD_MAX_BYTES` (default 25MB).
+- Same rate limit (25 uploads per IP per hour) and CAPTCHA policy as creation. An API token keeps its CAPTCHA exemption only when the request also proves ownership via `owner_token`.
+
+**Safety**
+
+- The replacement is written to a staging directory outside the served asset root, validated, then moved into place. The database pointer change is the publication switch.
+- If validation or publication fails, the previous site keeps working.
+- A ZIP is rejected if any entry escapes the target directory, if it expands beyond the extraction bound, or if it contains no `.html` file.
+
+**Errors**
+
+| Status | Meaning |
+|--------|---------|
+| 400 | Invalid or unsupported file, unsafe ZIP, or CAPTCHA failure |
+| 401 | Not authenticated (or, in restricted mode, owner token without a login) |
+| 403 | Authenticated but not the owner |
+| 404 | Site not found or expired |
+| 409 | A concurrent update changed the site first |
+| 413 | File or expanded ZIP exceeds the size limit |
+| 429 | Rate limit exceeded (check `Retry-After`) |
+
+### Example
+
+```bash
+# Replace the files at /view/quick-dragon-42, keeping the same URL
+curl -X PUT https://your-host.com/api/uploads/quick-dragon-42/content \
+  -F "file=@./site-v2.zip" \
+  -F "owner_token=abc123..."
+
+# As the signed-in owner, no owner token needed
+curl -X PUT https://your-host.com/api/uploads/quick-dragon-42/content \
+  -b cookies.txt \
+  -F "file=@./site-v2.zip"
+```
+
+```javascript
+const formData = new FormData()
+formData.append('file', fileInput.files[0])
+formData.append('owner_token', 'abc123...') // omit when logged in as the owner
+
+const res = await fetch('https://your-host.com/api/uploads/quick-dragon-42/content', {
+  method: 'PUT',
+  body: formData,
+})
+const { slug, url, entry_point } = await res.json()
+```
 
 ## Examples
 
@@ -165,7 +240,7 @@ Import the collection from `docs/postman-upload-collection.json`:
 
 ## Response
 
-All three endpoints return the same shape on success (200):
+The create endpoints (`/api/upload`, `/api/paste`, `/api/markdown`) return the same shape on success (200):
 
 ```json
 {
@@ -185,12 +260,26 @@ All three endpoints return the same shape on success (200):
 - **url_with_owner_token** — full URL with owner token in query string
 - **url_with_unlock** — *(only when password set)* shareable URL with a signed token that auto-unlocks the page; expires when the paste expires (or in 30 days if no expiration)
 
+The replacement endpoint (`PUT /api/uploads/[slug]/content`) returns a smaller shape (200):
+
+```json
+{
+  "slug": "quick-dragon-42",
+  "url": "https://your-host.com/view/quick-dragon-42",
+  "entry_point": ".content/quick-dragon-42/8f2c.../index.html"
+}
+```
+
+
 ## Error Responses
 
 | Status | Meaning |
 |--------|---------|
 | 400 | Missing or empty content, unsupported file format, invalid expiration, or password too long |
 | 401 | No valid web session or API token, or no registered-user session when `REGISTERED_USERS_ONLY=true` |
+| 403 | Authenticated but not permitted (e.g. replacing a site you do not own) |
+| 404 | Site not found or expired (replacement endpoint) |
+| 409 | Concurrent update detected (replacement endpoint) |
 | 413 | Content exceeds size limit |
 | 429 | Rate limit exceeded (check `Retry-After` header) |
 
