@@ -66,7 +66,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const ownerToken = readFormField(form, 'owner_token')
-  authorizeContentUpdate(event, row, ownerToken)
+  authorizeContentUpdate(event, row, ownerToken, hasValidApiToken(event))
 
   const file = form.find((f) => f.name === 'file')
   if (!file?.data) {

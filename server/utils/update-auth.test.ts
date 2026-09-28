@@ -113,6 +113,18 @@ describe('authorizeContentUpdate', () => {
     expect(() => authorizeContentUpdate({} as any, row(), 'owner-token')).toThrowError(/Log in/)
   })
 
+  it('restricted mode: API token client plus matching owner token authorizes without a login', async () => {
+    vi.stubEnv('REGISTERED_USERS_ONLY', 'true')
+    const { authorizeContentUpdate } = await load()
+    expect(authorizeContentUpdate({} as any, row(), 'owner-token', true)).toBe('owner_token')
+  })
+
+  it('restricted mode: API token client without a matching owner token is rejected', async () => {
+    vi.stubEnv('REGISTERED_USERS_ONLY', 'true')
+    const { authorizeContentUpdate } = await load()
+    expect(() => authorizeContentUpdate({} as any, row(), 'wrong-token', true)).toThrowError(/do not own/)
+  })
+
   it('restricted mode: login plus matching token authorizes an anonymous upload', async () => {
     vi.stubEnv('REGISTERED_USERS_ONLY', 'true')
     const { authorizeContentUpdate } = await load()
