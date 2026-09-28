@@ -117,11 +117,18 @@ You can publish and update sites from scripts, CI pipelines, or any tool that ca
 
 ### Getting an API token
 
-API tokens are created in the admin dashboard at **`/admin`**. Create a token, copy it once, and keep it secret. Send it on every request:
+Create a token, copy it once, and keep it secret. Send it on every request:
 
 ```
 Authorization: Bearer jolt_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
+
+Where to create one:
+
+- **Registered users:** **Dashboard → Account Settings → API tokens**. The token belongs to your account.
+- **Admins:** the **API Tokens** tab at `/admin`, where you can assign the token to a specific registered user (or leave it unowned).
+
+**Token ownership.** Sites published with a token are attributed to the token's owner, so they show up in that user's **My Uploads**. A token with no owner still works, but its uploads stay unattributed and appear only in the admin dashboard.
 
 > The API does not accept anonymous uploads. You need an API token, or a logged-in browser session. An API token works on its own — including when the host runs in **registered-users-only** mode — so scripts and CI can publish without a login.
 
@@ -153,6 +160,8 @@ The response includes the shareable URL and the **owner token**:
 Slugs are generated as `adjective-noun-hash` (for example `mystic-ninja-b589aa`). The trailing hash is random, so use the exact `slug` from the response rather than constructing one yourself.
 
 **Keep the `owner_token`** — it is shown only once and is what lets you update or delete the site later without a logged-in account. Save it somewhere safe.
+
+If the token that made the request belongs to a registered user, the new site is added to that user's **My Uploads**. An unowned token's uploads are not attributed to any account.
 
 ```javascript
 const form = new FormData()

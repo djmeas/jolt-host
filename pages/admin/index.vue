@@ -19,7 +19,14 @@ type UploadsResponse = {
   totalPages: number
 }
 
-type ApiTokenInfo = { id: string; nickname: string; created_at: string }
+type ApiTokenInfo = {
+  id: string
+  nickname: string
+  created_at: string
+  user_id: string | null
+  owner_name: string | null
+  owner_email: string | null
+}
 
 const page = ref(1)
 const dateFrom = ref('')
@@ -134,7 +141,15 @@ const { data: tokensData, refresh: refreshTokens } = await useFetch<{ tokens: Ap
 )
 const apiTokens = computed(() => tokensData.value?.tokens ?? [])
 
+// All users, for assigning token ownership.
+const { data: allUsersData } = await useFetch<UsersResponse>('/api/admin/users', {
+  query: { page: 1, limit: 100 },
+  key: 'admin-users-all',
+})
+const tokenOwnerOptions = computed(() => allUsersData.value?.items ?? [])
+
 const tokenNickname = ref('')
+const tokenOwnerId = ref('')
 const tokenCreating = ref(false)
 const tokenError = ref<string | null>(null)
 const newlyCreatedToken = ref<{ token: string; nickname: string } | null>(null)
@@ -148,10 +163,11 @@ async function createToken() {
   try {
     const res = await $fetch<{ token: string; nickname: string }>('/api/admin/tokens', {
       method: 'POST',
-      body: { nickname: tokenNickname.value.trim() },
+      body: { nickname: tokenNickname.value.trim(), user_id: tokenOwnerId.value || undefined },
     })
     newlyCreatedToken.value = { token: res.token, nickname: res.nickname }
     tokenNickname.value = ''
+    tokenOwnerId.value = ''
     await refreshTokens()
   } catch (e: unknown) {
     const err = e as { data?: { message?: string }; message?: string }
@@ -498,7 +514,7 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
 
       <!-- API Tokens tab -->
       <section v-if="activeTab === 'tokens'" class="section">
-        <p class="section-desc">Generate tokens for programmatic uploads. Use the header: <code>Authorization: Bearer &lt;token&gt;</code></p>
+        <p class="section-desc">Generate tokens for programmatic uploads. Use the header: <code>Authorization: Bearer &lt;token&gt;</code>. Assign an owner so the token's uploads appear in that user's dashboard.</p>
 
         <div v-if="newlyCreatedToken" class="token-reveal">
           <p class="token-warning">Copy this token now. It will not be shown again.</p>
@@ -518,6 +534,10 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
             :disabled="tokenCreating"
             @keydown.enter="createToken"
           />
+          <select v-model="tokenOwnerId" class="token-nickname-input" :disabled="tokenCreating" title="Owning account">
+            <option value="">No owner</option>
+            <option v-for="u in tokenOwnerOptions" :key="u.id" :value="u.id">{{ u.name }} ({{ u.email }})</option>
+          </select>
           <button type="button" class="create-token-btn" :disabled="!tokenNickname.trim() || tokenCreating" @click="createToken">
             {{ tokenCreating ? 'Creating…' : 'Generate token' }}
           </button>
@@ -527,6 +547,7 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
         <div v-if="apiTokens.length > 0" class="token-list">
           <div v-for="t in apiTokens" :key="t.id" class="token-row">
             <span class="token-nickname">{{ t.nickname }}</span>
+            <span class="token-owner muted">{{ t.owner_email ? `${t.owner_name} (${t.owner_email})` : 'No owner' }}</span>
             <span class="token-created muted">{{ formatDate(t.created_at) }}</span>
             <button type="button" class="action-btn danger" @click="deleteToken(t.nickname)">Revoke</button>
           </div>
@@ -892,6 +913,10 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
 .token-nickname {
   font-weight: 500;
   min-width: 120px;
+}
+.token-owner {
+  min-width: 160px;
+  font-size: 0.85rem;
 }
 .token-created {
   flex: 1;

@@ -193,11 +193,11 @@ describe('upload API integration', () => {
     }
   })
 
-  it('rejects web sessions and API tokens without a registered-user login on every publishing endpoint', async () => {
+  it('rejects web sessions but lets an API token publish on every publishing endpoint', async () => {
     const tokenResponse = await fetch(`${getBaseUrl()}/api/admin/tokens`, {
       method: 'POST',
       headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nickname: `test-${randomUUID()}` }),
+      body: JSON.stringify({ nickname: `test-${randomUUID()}`, user_id: userId }),
     })
     expect(tokenResponse.status).toBe(200)
     const { token } = await tokenResponse.json()
@@ -211,14 +211,139 @@ describe('upload API integration', () => {
       { path: '/api/markdown', body: () => JSON.stringify({ markdown: '# test' }) },
     ]
     for (const { path, body } of requests) {
-      const unauthenticatedHeaders: Record<string, string>[] = [{ Cookie: cookie }, { Authorization: `Bearer ${token}` }]
-      for (const headers of unauthenticatedHeaders) {
-        const res = await fetch(`${getBaseUrl()}${path}`, { method: 'POST', headers: { ...headers, ...(path !== '/api/upload' ? { 'Content-Type': 'application/json' } : {}) }, body: body() })
-        expect(res.status, `${path} with ${Object.keys(headers)[0]}`).toBe(401)
-      }
-      const res = await fetch(`${getBaseUrl()}${path}`, { method: 'POST', headers: { Cookie: userCookie, ...(path !== '/api/upload' ? { 'Content-Type': 'application/json' } : {}) }, body: body() })
-      expect(res.ok, path).toBe(true)
+      // A bare web session cookie is not enough in restricted mode.
+      const webOnly = await fetch(`${getBaseUrl()}${path}`, {
+        method: 'POST',
+        headers: { Cookie: cookie, ...(path !== '/api/upload' ? { 'Content-Type': 'application/json' } : {}) },
+        body: body(),
+      })
+      expect(webOnly.status, `${path} with web session`).toBe(401)
+
+      // An API token alone is enough.
+      const tokenOnly = await fetch(`${getBaseUrl()}${path}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, ...(path !== '/api/upload' ? { 'Content-Type': 'application/json' } : {}) },
+        body: body(),
+      })
+      expect(tokenOnly.ok, `${path} with API token`).toBe(true)
+
+      const withLogin = await fetch(`${getBaseUrl()}${path}`, {
+        method: 'POST',
+        headers: { Cookie: userCookie, ...(path !== '/api/upload' ? { 'Content-Type': 'application/json' } : {}) },
+        body: body(),
+      })
+      expect(withLogin.ok, path).toBe(true)
     }
+  })
+
+  it('attributes token-created sites to the token owner, so they appear in their My Uploads', async () => {
+    const ownerEmail = `token-owner-${randomUUID()}@example.com`
+    const owner = await fetch(`${getBaseUrl()}/api/admin/users`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Token Owner', email: ownerEmail, password }),
+    })
+    expect(owner.status).toBe(200)
+    const ownerId = (await owner.json()).id
+    const ownerLogin = await fetch(`${getBaseUrl()}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: ownerEmail, password }),
+    })
+    const ownerCookie = ownerLogin.headers.get('set-cookie')?.split(';')[0] ?? ''
+
+    const owned = await fetch(`${getBaseUrl()}/api/admin/tokens`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nickname: `owned-${randomUUID()}`, user_id: ownerId }),
+    })
+    const ownedToken = (await owned.json()).token
+
+    // Unowned token leaves uploads unattributed.
+    const unowned = await fetch(`${getBaseUrl()}/api/admin/tokens`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nickname: `unowned-${randomUUID()}` }),
+    })
+    const unownedToken = (await unowned.json()).token
+
+    const post = (token: string) => {
+      const form = new FormData()
+      form.append('file', new Blob(['<h1>token upload</h1>'], { type: 'text/html' }), 'index.html')
+      return fetch(`${getBaseUrl()}/api/upload`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form })
+    }
+
+    const ownedUpload = await post(ownedToken).then(readJson<Record<string, string>>)
+    const unownedUpload = await post(unownedToken).then(readJson<Record<string, string>>)
+
+    // The token owner sees only their own token-created site.
+    const mine = await fetch(`${getBaseUrl()}/api/user/uploads?limit=100`, { headers: { Cookie: ownerCookie } })
+      .then(readJson<{ items: Array<{ slug: string }> }>)
+    const mineSlugs = mine.items.map((i) => i.slug)
+    expect(mineSlugs).toContain(ownedUpload.slug)
+    expect(mineSlugs).not.toContain(unownedUpload.slug)
+
+    // The unrelated registered user does not see it either.
+    const other = await fetch(`${getBaseUrl()}/api/user/uploads?limit=100`, { headers: { Cookie: userCookie } })
+      .then(readJson<{ items: Array<{ slug: string }> }>)
+    expect(other.items.map((i) => i.slug)).not.toContain(ownedUpload.slug)
+  })
+
+  it('lets a registered user manage their own API tokens', async () => {
+    const nickname = `self-${randomUUID()}`
+    const created = await fetch(`${getBaseUrl()}/api/user/tokens`, {
+      method: 'POST',
+      headers: { Cookie: userCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nickname }),
+    })
+    expect(created.status).toBe(200)
+    const { token } = await created.json()
+
+    const listed = await fetch(`${getBaseUrl()}/api/user/tokens`, { headers: { Cookie: userCookie } })
+      .then(readJson<{ tokens: Array<{ nickname: string }> }>)
+    expect(listed.tokens.map((t) => t.nickname)).toContain(nickname)
+
+    // A self-service token attributes uploads to its owner.
+    const form = new FormData()
+    form.append('file', new Blob(['<h1>self token</h1>'], { type: 'text/html' }), 'index.html')
+    const upload = await fetch(`${getBaseUrl()}/api/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    }).then(readJson<Record<string, string>>)
+    const mine = await fetch(`${getBaseUrl()}/api/user/uploads?limit=100`, { headers: { Cookie: userCookie } })
+      .then(readJson<{ items: Array<{ slug: string }> }>)
+    expect(mine.items.map((i) => i.slug)).toContain(upload.slug)
+
+    // Another user cannot revoke it, and the owner can.
+    const otherEmail = `not-owner-${randomUUID()}@example.com`
+    await fetch(`${getBaseUrl()}/api/admin/users`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Not Owner', email: otherEmail, password }),
+    })
+    const otherLogin = await fetch(`${getBaseUrl()}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: otherEmail, password }),
+    })
+    const otherCookie = otherLogin.headers.get('set-cookie')?.split(';')[0] ?? ''
+    const forbidden = await fetch(`${getBaseUrl()}/api/user/tokens/delete`, {
+      method: 'POST',
+      headers: { Cookie: otherCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nickname }),
+    })
+    expect(forbidden.status).toBe(404)
+
+    const revoked = await fetch(`${getBaseUrl()}/api/user/tokens/delete`, {
+      method: 'POST',
+      headers: { Cookie: userCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nickname }),
+    })
+    expect(revoked.status).toBe(200)
+    const after = await fetch(`${getBaseUrl()}/api/user/tokens`, { headers: { Cookie: userCookie } })
+      .then(readJson<{ tokens: Array<{ nickname: string }> }>)
+    expect(after.tokens.map((t) => t.nickname)).not.toContain(nickname)
   })
 
   it('disables public registration without disabling login for existing users', async () => {
@@ -453,7 +578,7 @@ describe('replace content API integration', () => {
     insertUpload(uuid(), anonSlug, `${anonSlug}/index.html`, null, anonToken, null, null, null)
     expect(findUploadBySlug(anonSlug)?.user_id).toBeNull()
 
-    // A token alone is not enough while REGISTERED_USERS_ONLY=true.
+    // With no login and no API token there is no authenticated client.
     const tokenOnly = await update(anonSlug, replaceForm('replacement-site.zip', { owner_token: anonToken }))
     expect(tokenOnly.status).toBe(401)
 
@@ -477,19 +602,24 @@ describe('replace content API integration', () => {
     expect(ok.status).toBe(200)
   })
 
-  it('rejects an API token alone but lets an admin update', async () => {
+  it('rejects an API token without the owner token, but lets an admin and the owner update', async () => {
     const created = await createSite('dummy.html', {}, { Cookie: userCookie })
     const slug = created.slug!
 
     const tokenResponse = await fetch(`${getBaseUrl()}/api/admin/tokens`, {
       method: 'POST',
       headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nickname: `update-${randomUUID()}` }),
+      body: JSON.stringify({ nickname: `update-${randomUUID()}`, user_id: userId }),
     })
     const { token } = await tokenResponse.json()
 
-    const apiOnly = await update(slug, replaceForm('replacement-site.zip'), { Authorization: `Bearer ${token}` })
-    expect(apiOnly.status).toBe(401)
+    // An API token authenticates the client but is not ownership proof: the
+    // owner token is still required to replace someone's site.
+    const apiWithoutOwner = await update(slug, replaceForm('replacement-site.zip'), { Authorization: `Bearer ${token}` })
+    expect(apiWithoutOwner.status).toBe(403)
+
+    const apiWithOwner = await update(slug, replaceForm('replacement-site.zip', { owner_token: created.owner_token! }), { Authorization: `Bearer ${token}` })
+    expect(apiWithOwner.status).toBe(200)
 
     const notOwner = await update(slug, replaceForm('replacement-site.zip'), { Cookie: userCookie })
     // The registered user created this site, so they own it.

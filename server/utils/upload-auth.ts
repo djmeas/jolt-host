@@ -2,19 +2,32 @@ import { getRequestHeader } from 'h3'
 import type { H3Event } from 'h3'
 import { hashApiToken } from '~/server/utils/api-token'
 import { findApiTokenByHash, findUserById } from '~/server/utils/db'
+import type { ApiTokenRow } from '~/server/utils/db'
 import { hasValidWebSession } from '~/server/utils/web-session'
 import { getUserIdFromEvent } from '~/server/utils/user-auth'
 import { registeredUsersOnly } from '~/server/utils/upload-mode'
 
-export function hasValidApiToken(event: H3Event): boolean {
+/** Returns the API token row for the request's Authorization header, if valid. */
+export function getApiToken(event: H3Event): ApiTokenRow | undefined {
   const auth = getRequestHeader(event, 'authorization')
-  if (!auth || typeof auth !== 'string') return false
+  if (!auth || typeof auth !== 'string') return undefined
   const match = auth.match(/^Bearer\s+(.+)$/i)
-  if (!match) return false
+  if (!match) return undefined
   const token = match[1].trim()
-  if (!token.startsWith('jolt_')) return false
-  const hash = hashApiToken(token)
-  return findApiTokenByHash(hash) !== undefined
+  if (!token.startsWith('jolt_')) return undefined
+  return findApiTokenByHash(hashApiToken(token))
+}
+
+export function hasValidApiToken(event: H3Event): boolean {
+  return getApiToken(event) !== undefined
+}
+
+/**
+ * The account an upload should be attributed to: a logged-in user takes
+ * precedence, otherwise the API token's owner. Unowned tokens yield null.
+ */
+export function resolveUploadUserId(event: H3Event): string | null {
+  return getUserIdFromEvent(event) ?? getApiToken(event)?.user_id ?? null
 }
 
 export function isAuthorizedToUpload(event: H3Event): boolean {
