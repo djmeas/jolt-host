@@ -20,10 +20,16 @@ export function ownerTokenMatches(stored: string | null, provided: string): bool
 
 /**
  * Authorizes replacing the content of an existing site against that site's row.
- * Web sessions and API tokens are not ownership proof. Returns how access was
- * granted, or throws 401/403.
+ * Web sessions are not ownership proof. In restricted mode, a valid API token
+ * counts as an authenticated client, but the owner token must still match.
+ * Returns how access was granted, or throws 401/403.
  */
-export function authorizeContentUpdate(event: H3Event, row: UploadRow, ownerToken: string): UpdateAuthorizationVia {
+export function authorizeContentUpdate(
+  event: H3Event,
+  row: UploadRow,
+  ownerToken: string,
+  isApiClient = false
+): UpdateAuthorizationVia {
   if (isAdminAuthenticated(event)) return 'admin'
 
   const userId = getUserIdFromEvent(event)
@@ -31,10 +37,13 @@ export function authorizeContentUpdate(event: H3Event, row: UploadRow, ownerToke
   const tokenMatches = ownerTokenMatches(row.owner_token, ownerToken)
 
   if (registeredUsersOnly()) {
-    if (!user) {
-      throw createError({ statusCode: 401, message: 'Log in with a registered account to update this site.' })
+    if (!user && !isApiClient) {
+      throw createError({
+        statusCode: 401,
+        message: 'Log in with a registered account, or provide an API token, to update this site.',
+      })
     }
-    if (row.user_id && row.user_id === user.id) return 'user'
+    if (user && row.user_id && row.user_id === user.id) return 'user'
     if (tokenMatches) return 'owner_token'
     throw createError({ statusCode: 403, message: 'You do not own this site.' })
   }

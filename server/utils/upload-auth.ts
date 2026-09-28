@@ -19,7 +19,10 @@ export function hasValidApiToken(event: H3Event): boolean {
 
 export function isAuthorizedToUpload(event: H3Event): boolean {
   const userId = getUserIdFromEvent(event)
-  if (registeredUsersOnly()) return userId !== null && findUserById(userId) !== null
+  if (registeredUsersOnly()) {
+    if (userId !== null && findUserById(userId) !== null) return true
+    return hasValidApiToken(event)
+  }
   if (userId !== null) return true
   return hasValidApiToken(event) || hasValidWebSession(event)
 }
@@ -30,7 +33,7 @@ export function requireUploadAuthorization(event: H3Event): void {
     statusCode: 401,
     statusMessage: 'Unauthorized',
     message: registeredUsersOnly()
-      ? 'Log in with a registered account to publish.'
+      ? 'Log in with a registered account, or provide an API token in the Authorization header, to publish.'
       : 'API token required for programmatic uploads. Use the web form at / or provide an API token in the Authorization header.',
   })
 }

@@ -24,7 +24,9 @@ Authorization: Bearer jolt_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 Tokens are created in the admin dashboard at `/admin`.
 
-When `REGISTERED_USERS_ONLY=true`, log in before publishing. Register at `/register` if sign-up is enabled; when `ENABLE_REGISTRATION=false`, an admin must create your account. All three endpoints require a registered-user session cookie; web session cookies and API tokens alone cannot publish in this mode.
+When `REGISTERED_USERS_ONLY=true`, publishing requires either a logged-in registered-user session cookie **or** a valid API token. An API token authorizes programmatic uploads without logging in, so token-based automation keeps working in restricted mode. A web session cookie alone cannot publish.
+
+Register at `/register` if sign-up is enabled; when `ENABLE_REGISTRATION=false`, an admin must create your account.
 
 ## `/api/upload` — File Upload
 
@@ -86,8 +88,8 @@ Replaces the **entire** published file set for an existing site while keeping it
 - A signed-in user can update a site they own.
 - An admin session can update any site.
 - In open publishing mode (default), a site's owner token authorizes an update.
-- A web upload session or a general API token is **not** ownership proof and cannot update someone else's site.
-- With `REGISTERED_USERS_ONLY=true`, an owner token alone is insufficient: a logged-in user is still required. For an older anonymous upload in that mode, both a login and its owner token are required.
+- An API token is **not** ownership proof: it authenticates the client, but a site is still only replaceable with its owner token, a matching login, or an admin session.
+- With `REGISTERED_USERS_ONLY=true`, an API token counts as an authenticated client, so a valid API token plus the site's `owner_token` can replace a site without logging in. Without an API token, an owner token alone is insufficient and a login is still required.
 
 Pass `owner_token` as a form field, never in the URL or query string.
 
@@ -107,7 +109,7 @@ Pass `owner_token` as a form field, never in the URL or query string.
 | Status | Meaning |
 |--------|---------|
 | 400 | Invalid or unsupported file, unsafe ZIP, or CAPTCHA failure |
-| 401 | Not authenticated (or, in restricted mode, owner token without a login) |
+| 401 | Not authenticated (or, in restricted mode, an owner token without a login or API token) |
 | 403 | Authenticated but not the owner |
 | 404 | Site not found or expired |
 | 409 | A concurrent update changed the site first |
@@ -276,7 +278,7 @@ The replacement endpoint (`PUT /api/uploads/[slug]/content`) returns a smaller s
 | Status | Meaning |
 |--------|---------|
 | 400 | Missing or empty content, unsupported file format, invalid expiration, or password too long |
-| 401 | No valid web session or API token, or no registered-user session when `REGISTERED_USERS_ONLY=true` |
+| 401 | No valid web session or API token, or neither a registered-user session nor an API token when `REGISTERED_USERS_ONLY=true` |
 | 403 | Authenticated but not permitted (e.g. replacing a site you do not own) |
 | 404 | Site not found or expired (replacement endpoint) |
 | 409 | Concurrent update detected (replacement endpoint) |

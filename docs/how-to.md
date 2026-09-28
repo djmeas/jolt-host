@@ -123,7 +123,7 @@ API tokens are created in the admin dashboard at **`/admin`**. Create a token, c
 Authorization: Bearer jolt_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-> The API does not accept anonymous uploads. You need an API token (or a logged-in browser session). If the host runs in **registered-users-only** mode, an API token alone is not enough — you must also be logged in as a registered user.
+> The API does not accept anonymous uploads. You need an API token, or a logged-in browser session. An API token works on its own — including when the host runs in **registered-users-only** mode — so scripts and CI can publish without a login.
 
 ### Uploading a new site
 
@@ -141,14 +141,16 @@ The response includes the shareable URL and the **owner token**:
 
 ```json
 {
-  "slug": "quick-dragon-42",
-  "url": "https://yourdomain.com/view/quick-dragon-42",
-  "entry_point": "quick-dragon-42/index.html",
+  "slug": "quick-dragon-7f3a9c",
+  "url": "https://yourdomain.com/view/quick-dragon-7f3a9c",
+  "entry_point": "quick-dragon-7f3a9c/index.html",
   "owner_token": "abc123...",
-  "url_with_owner_token": "https://yourdomain.com/view/quick-dragon-42?owner_token=abc123...",
-  "url_with_unlock": "https://yourdomain.com/view/quick-dragon-42?unlock=TOKEN"
+  "url_with_owner_token": "https://yourdomain.com/view/quick-dragon-7f3a9c?owner_token=abc123...",
+  "url_with_unlock": "https://yourdomain.com/view/quick-dragon-7f3a9c?unlock=TOKEN"
 }
 ```
+
+Slugs are generated as `adjective-noun-hash` (for example `mystic-ninja-b589aa`). The trailing hash is random, so use the exact `slug` from the response rather than constructing one yourself.
 
 **Keep the `owner_token`** — it is shown only once and is what lets you update or delete the site later without a logged-in account. Save it somewhere safe.
 
@@ -171,11 +173,11 @@ console.log(data.owner_token)  // save this to update or delete later
 
 To publish a new version **at the same URL**, send the full new file set (as a ZIP for multiple files) to `PUT /api/uploads/[slug]/content`. The replacement replaces the *entire* site: any file you leave out stops being served. The URL, title, password, owner token, and expiration all stay the same, and updating does **not** reset the expiration timer.
 
-Provide the site's `owner_token` as a form field (never in the URL). If you are logged in as the owner or are an admin, you do not need the token.
+Provide the site's `owner_token` as a form field (never in the URL). With a valid API token, the `owner_token` is what proves you own the site — so an API token plus the owner token is enough to replace a site, even in **registered-users-only** mode, without logging in. If you are logged in as the owner, or are an admin, you do not need the owner token.
 
 ```bash
-# Replace all files for the site at /view/quick-dragon-42
-curl -X PUT https://yourdomain.com/api/uploads/quick-dragon-42/content \
+# Replace all files for the site at /view/quick-dragon-7f3a9c
+curl -X PUT https://yourdomain.com/api/uploads/quick-dragon-7f3a9c/content \
   -H "Authorization: Bearer jolt_YOUR_TOKEN" \
   -F "file=@./site-v2.zip" \
   -F "owner_token=abc123..."
@@ -186,7 +188,7 @@ const form = new FormData()
 form.append('file', fileInput.files[0])
 form.append('owner_token', 'abc123...') // omit when logged in as the owner
 
-const res = await fetch('https://yourdomain.com/api/uploads/quick-dragon-42/content', {
+const res = await fetch('https://yourdomain.com/api/uploads/quick-dragon-7f3a9c/content', {
   method: 'PUT',
   headers: { Authorization: 'Bearer jolt_YOUR_TOKEN' },
   body: form,
@@ -198,9 +200,9 @@ On success you get back the unchanged `slug` and `url` plus the new `entry_point
 
 ```json
 {
-  "slug": "quick-dragon-42",
-  "url": "https://yourdomain.com/view/quick-dragon-42",
-  "entry_point": ".content/quick-dragon-42/8f2c.../index.html"
+  "slug": "quick-dragon-7f3a9c",
+  "url": "https://yourdomain.com/view/quick-dragon-7f3a9c",
+  "entry_point": ".content/quick-dragon-7f3a9c/8f2c.../index.html"
 }
 ```
 
@@ -225,8 +227,8 @@ Use the owner token to change settings without re-uploading files:
 | Status | Meaning |
 |---|---|
 | 400 | Missing or invalid file, unsupported format, or failed CAPTCHA |
-| 401 | Missing or invalid token (or no registered-user login when required) |
-| 403 | Token or session is valid but does not own the site |
+| 401 | Not authenticated — no valid API token and no login |
+| 403 | Authenticated (login or API token) but not proven as the site's owner |
 | 404 | Site not found or expired |
 | 409 | A concurrent update changed the site first |
 | 413 | File (or expanded ZIP) is too large |

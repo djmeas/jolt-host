@@ -112,15 +112,31 @@ describe('upload-auth', () => {
       expect(isAuthorizedToUpload(createMockEvent() as any)).toBe(false)
     })
 
-    it('requires an existing registered user when restricted, even with a web cookie or API token', async () => {
+    it('authorizes a valid API token when restricted, without a login', async () => {
+      vi.stubEnv('REGISTERED_USERS_ONLY', 'true')
+      const { isAuthorizedToUpload } = await loadUploadAuth()
+      mockGetCookie.mockReturnValue(undefined)
+      mockGetRequestHeader.mockReturnValue('Bearer jolt_valid')
+      mockFindApiTokenByHash.mockReturnValue({ id: '1' })
+      expect(isAuthorizedToUpload(createMockEvent() as any)).toBe(true)
+    })
+
+    it('rejects a web session cookie alone when restricted', async () => {
       vi.stubEnv('REGISTERED_USERS_ONLY', 'true')
       const { isAuthorizedToUpload } = await loadUploadAuth()
       const { value } = createWebSession()
       mockGetCookie.mockImplementation((_event, name) => name === 'jolt_web' ? value : undefined)
-      mockGetRequestHeader.mockReturnValue('Bearer jolt_valid')
-      mockFindApiTokenByHash.mockReturnValue({ id: '1' })
+      mockGetRequestHeader.mockReturnValue(undefined)
+      mockFindApiTokenByHash.mockReturnValue(undefined)
       expect(isAuthorizedToUpload(createMockEvent() as any)).toBe(false)
+    })
 
+    it('requires an existing registered user when restricted and no API token', async () => {
+      vi.stubEnv('REGISTERED_USERS_ONLY', 'true')
+      const { isAuthorizedToUpload } = await loadUploadAuth()
+      const { value } = createWebSession()
+      mockGetRequestHeader.mockReturnValue(undefined)
+      mockFindApiTokenByHash.mockReturnValue(undefined)
       mockGetCookie.mockImplementation((_event, name) => name === 'jolt_user' ? userCookie('deleted') : value)
       mockFindUserById.mockReturnValue(null)
       expect(isAuthorizedToUpload(createMockEvent() as any)).toBe(false)
