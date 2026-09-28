@@ -267,6 +267,77 @@ async function changePassword() {
     passwordChangeLoading.value = false
   }
 }
+
+// --- API tokens ---
+type ApiToken = { id: string; nickname: string; created_at: string }
+const tokens = ref<ApiToken[]>([])
+const tokensLoading = ref(false)
+const tokenError = ref<string | null>(null)
+const newTokenName = ref('')
+const tokenCreating = ref(false)
+const revealedToken = ref<string | null>(null)
+const tokenCopied = ref(false)
+
+async function fetchTokens() {
+  tokensLoading.value = true
+  tokenError.value = null
+  try {
+    const data = await $fetch<{ tokens: ApiToken[] }>('/api/user/tokens')
+    tokens.value = data.tokens
+  } catch (e: unknown) {
+    const err = e as { data?: { message?: string }; message?: string }
+    tokenError.value = err.data?.message ?? err.message ?? 'Failed to load API tokens'
+  } finally {
+    tokensLoading.value = false
+  }
+}
+
+async function createToken() {
+  if (!newTokenName.value.trim()) return
+  tokenError.value = null
+  tokenCreating.value = true
+  revealedToken.value = null
+  try {
+    const res = await $fetch<{ token: string; nickname: string }>('/api/user/tokens', {
+      method: 'POST',
+      body: { nickname: newTokenName.value.trim() },
+    })
+    revealedToken.value = res.token
+    newTokenName.value = ''
+    await fetchTokens()
+  } catch (e: unknown) {
+    const err = e as { data?: { message?: string }; message?: string }
+    tokenError.value = err.data?.message ?? err.message ?? 'Failed to create token'
+  } finally {
+    tokenCreating.value = false
+  }
+}
+
+async function copyRevealedToken() {
+  if (!revealedToken.value) return
+  try {
+    await navigator.clipboard.writeText(revealedToken.value)
+    tokenCopied.value = true
+    setTimeout(() => { tokenCopied.value = false }, 2000)
+  } catch {
+    tokenError.value = 'Failed to copy to clipboard'
+  }
+}
+
+async function revokeToken(nickname: string) {
+  if (!confirm(`Revoke API token "${nickname}"? This cannot be undone.`)) return
+  try {
+    await $fetch('/api/user/tokens/delete', { method: 'POST', body: { nickname } })
+    if (revealedToken.value) revealedToken.value = null
+    await fetchTokens()
+  } catch {
+    alert('Failed to revoke token')
+  }
+}
+
+onMounted(() => {
+  if (!isAdmin.value && isLoggedIn.value) fetchTokens()
+})
 </script>
 
 <template>
@@ -500,6 +571,49 @@ async function changePassword() {
           </form>
           <p v-if="passwordChangeError" class="form-error">{{ passwordChangeError }}</p>
           <p v-if="passwordChangeSuccess" class="form-success">Password changed successfully.</p>
+        </div>
+
+        <h2 class="section-title">API tokens</h2>
+        <div class="account-card">
+          <p class="section-desc">
+            Use a token for programmatic uploads:
+            <code>Authorization: Bearer &lt;token&gt;</code>.
+            Sites you publish with a token appear in My Uploads.
+          </p>
+
+          <div v-if="revealedToken" class="token-reveal">
+            <p class="token-warning">Copy this token now. It will not be shown again.</p>
+            <div class="token-display">
+              <code class="token-value">{{ revealedToken }}</code>
+              <button type="button" class="action-btn" @click="copyRevealedToken">
+                {{ tokenCopied ? 'Copied!' : 'Copy' }}
+              </button>
+            </div>
+            <button type="button" class="action-btn muted" @click="revealedToken = null">I've copied it</button>
+          </div>
+
+          <form v-else class="token-create" @submit.prevent="createToken">
+            <input
+              v-model="newTokenName"
+              type="text"
+              class="form-input"
+              placeholder="Token nickname (e.g. CI pipeline)"
+              :disabled="tokenCreating"
+            />
+            <button type="submit" class="submit-btn" :disabled="tokenCreating || !newTokenName.trim()">
+              {{ tokenCreating ? 'Creating…' : 'Generate token' }}
+            </button>
+          </form>
+          <p v-if="tokenError" class="form-error">{{ tokenError }}</p>
+
+          <div v-if="tokens.length > 0" class="token-list">
+            <div v-for="t in tokens" :key="t.id" class="token-row">
+              <span class="token-nickname">{{ t.nickname }}</span>
+              <span class="token-created muted">{{ formatDate(t.created_at) }}</span>
+              <button type="button" class="action-btn danger" @click="revokeToken(t.nickname)">Revoke</button>
+            </div>
+          </div>
+          <p v-else-if="!tokensLoading && !revealedToken" class="empty muted">No API tokens yet.</p>
         </div>
       </section>
 
@@ -897,6 +1011,72 @@ async function changePassword() {
   margin: 1rem 0 0;
   font-size: 0.9rem;
   color: #22c55e;
+}
+.section-desc {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: #a1a1aa;
+  line-height: 1.6;
+}
+.section-desc code {
+  font-family: ui-monospace, 'Cascadia Code', Menlo, monospace;
+  font-size: 0.85em;
+  padding: 0.1em 0.35em;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 4px;
+  color: #c4b5fd;
+}
+.token-create {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.token-reveal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.token-warning {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #fbbf24;
+}
+.token-display {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.token-value {
+  flex: 1;
+  font-family: ui-monospace, 'Cascadia Code', Menlo, monospace;
+  font-size: 0.8rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #c4b5fd;
+  overflow-wrap: anywhere;
+}
+.token-list {
+  margin-top: 1rem;
+}
+.token-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.token-row:last-child {
+  border-bottom: none;
+}
+.token-nickname {
+  font-weight: 500;
+  min-width: 120px;
+}
+.token-created {
+  flex: 1;
+  font-size: 0.85rem;
 }
 .back-link {
   display: inline-block;

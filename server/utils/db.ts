@@ -11,6 +11,22 @@ const DB_PATH = process.env.NODE_ENV === 'test' || process.env.JOLT_TEST_MODE ==
 
 let db: ReturnType<typeof Database> | null = null
 
+/**
+ * Adds a column only when absent. Concurrent test workers share one DB file, so
+ * the existence check and the ALTER are not atomic; a duplicate-column error
+ * means another worker won the race and the desired state is already in place.
+ */
+function addColumnIfMissing(table: string, column: string, definition: string): void {
+  const database = db!
+  const exists = (database.prepare(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`).get(column) as { '1': number } | undefined) != null
+  if (exists) return
+  try {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  } catch (err) {
+    if (!String((err as Error).message).includes('duplicate column name')) throw err
+  }
+}
+
 function getDb(): Database.Database {
   if (!db) {
     const dir = dirname(DB_PATH)
@@ -27,22 +43,11 @@ function getDb(): Database.Database {
       );
       CREATE INDEX IF NOT EXISTS idx_uploads_slug ON uploads(slug);
     `)
-    const hasPasswordHash = (db.prepare("SELECT 1 FROM pragma_table_info('uploads') WHERE name = 'password_hash'").get() as { '1': number } | undefined) != null
-    if (!hasPasswordHash) {
-      db.exec(`ALTER TABLE uploads ADD COLUMN password_hash TEXT`)
-    }
-    const hasOwnerToken = (db.prepare("SELECT 1 FROM pragma_table_info('uploads') WHERE name = 'owner_token'").get() as { '1': number } | undefined) != null
-    if (!hasOwnerToken) {
-      db.exec(`ALTER TABLE uploads ADD COLUMN owner_token TEXT`)
-    }
-    const hasExpiresAt = (db.prepare("SELECT 1 FROM pragma_table_info('uploads') WHERE name = 'expires_at'").get() as { '1': number } | undefined) != null
-    if (!hasExpiresAt) {
-      db.exec(`ALTER TABLE uploads ADD COLUMN expires_at TEXT`)
-    }
-    const hasTitle = (db.prepare("SELECT 1 FROM pragma_table_info('uploads') WHERE name = 'title'").get() as { '1': number } | undefined) != null
-    if (!hasTitle) {
-      db.exec(`ALTER TABLE uploads ADD COLUMN title TEXT`)
-    }
+    addColumnIfMissing('uploads', 'password_hash', 'TEXT')
+    addColumnIfMissing('uploads', 'owner_token', 'TEXT')
+    addColumnIfMissing('uploads', 'expires_at', 'TEXT')
+    addColumnIfMissing('uploads', 'title', 'TEXT')
+
     db.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
@@ -57,12 +62,8 @@ function getDb(): Database.Database {
       CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
     `)
 
-    // check if user_id column exists on uploads, add if not
-    const uploadsColumns = db.prepare("SELECT name FROM pragma_table_info('uploads')").all() as { name: string }[]
-    if (!uploadsColumns.find(c => c.name === 'user_id')) {
-      db.prepare("ALTER TABLE uploads ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE SET NULL").run()
-      db.prepare("CREATE INDEX IF NOT EXISTS idx_uploads_user_id ON uploads(user_id)").run()
-    }
+    addColumnIfMissing('uploads', 'user_id', 'TEXT REFERENCES users(id) ON DELETE SET NULL')
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_uploads_user_id ON uploads(user_id)`)
 
     db.exec(`
       CREATE TABLE IF NOT EXISTS api_tokens (
@@ -73,6 +74,10 @@ function getDb(): Database.Database {
       );
       CREATE INDEX IF NOT EXISTS idx_api_tokens_nickname ON api_tokens(nickname);
     `)
+
+    // Link tokens to the account that owns them, so uploads can be attributed.
+    addColumnIfMissing('api_tokens', 'user_id', 'TEXT REFERENCES users(id) ON DELETE SET NULL')
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_api_tokens_user_id ON api_tokens(user_id)`)
   }
   return db
 }
@@ -295,28 +300,48 @@ export function updatePasswordBySlug(slug: string, passwordHash: string | null):
 }
 
 // API tokens
-export type ApiTokenRow = { id: string; nickname: string; token_hash: string; created_at: string }
+export type ApiTokenRow = { id: string; nickname: string; token_hash: string; created_at: string; user_id: string | null }
 
-export function insertApiToken(id: string, nickname: string, tokenHash: string): void {
+export type ApiTokenListItem = {
+  id: string
+  nickname: string
+  created_at: string
+  user_id: string | null
+  owner_name: string | null
+  owner_email: string | null
+}
+
+export function insertApiToken(id: string, nickname: string, tokenHash: string, userId: string | null = null): void {
   const database = getDb()
   database.prepare(
-    'INSERT INTO api_tokens (id, nickname, token_hash, created_at) VALUES (?, ?, ?, datetime(\'now\'))'
-  ).run(id, nickname, tokenHash)
+    'INSERT INTO api_tokens (id, nickname, token_hash, created_at, user_id) VALUES (?, ?, ?, datetime(\'now\'), ?)'
+  ).run(id, nickname, tokenHash, userId)
 }
 
 export function findApiTokenByNickname(nickname: string): ApiTokenRow | undefined {
   const database = getDb()
   return database.prepare(
-    'SELECT id, nickname, token_hash, created_at FROM api_tokens WHERE nickname = ?'
+    'SELECT id, nickname, token_hash, created_at, user_id FROM api_tokens WHERE nickname = ?'
   ).get(nickname) as ApiTokenRow | undefined
 }
 
-export function getAllApiTokens(): { id: string; nickname: string; created_at: string }[] {
+export function getAllApiTokens(): ApiTokenListItem[] {
+  const database = getDb()
+  return database.prepare(
+    `SELECT t.id, t.nickname, t.created_at, t.user_id,
+       u.name AS owner_name, u.email AS owner_email
+     FROM api_tokens t
+     LEFT JOIN users u ON u.id = t.user_id
+     ORDER BY t.created_at DESC`
+  ).all() as ApiTokenListItem[]
+}
+
+export function getApiTokensByUserId(userId: string): { id: string; nickname: string; created_at: string }[] {
   const database = getDb()
   const rows = database.prepare(
-    'SELECT id, nickname, created_at FROM api_tokens ORDER BY created_at DESC'
-  ).all() as ApiTokenRow[]
-  return rows.map((r) => ({ id: r.id, nickname: r.nickname, created_at: r.created_at }))
+    'SELECT id, nickname, created_at FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC'
+  ).all(userId) as { id: string; nickname: string; created_at: string }[]
+  return rows
 }
 
 export function deleteApiTokenByNickname(nickname: string): boolean {
@@ -325,10 +350,22 @@ export function deleteApiTokenByNickname(nickname: string): boolean {
   return info.changes === 1
 }
 
+/** Deletes a token only when it belongs to the given user; callers treat false as "not found / not yours". */
+export function deleteApiTokenByNicknameAndUserId(nickname: string, userId: string): boolean {
+  const database = getDb()
+  const info = database.prepare('DELETE FROM api_tokens WHERE nickname = ? AND user_id = ?').run(nickname, userId)
+  return info.changes === 1
+}
+
+export function deleteApiTokensByUserId(userId: string): void {
+  const database = getDb()
+  database.prepare('DELETE FROM api_tokens WHERE user_id = ?').run(userId)
+}
+
 export function findApiTokenByHash(tokenHash: string): ApiTokenRow | undefined {
   const database = getDb()
   return database.prepare(
-    'SELECT id, nickname, token_hash, created_at FROM api_tokens WHERE token_hash = ?'
+    'SELECT id, nickname, token_hash, created_at, user_id FROM api_tokens WHERE token_hash = ?'
   ).get(tokenHash) as ApiTokenRow | undefined
 }
 
@@ -379,6 +416,8 @@ export function updateUserNameEmail(id: string, name: string, email: string): vo
 
 export function deleteUser(id: string): void {
   const database = getDb()
+  // Revoke the account's API tokens so a deleted user leaves no working credential.
+  database.prepare('DELETE FROM api_tokens WHERE user_id = ?').run(id)
   database.prepare('DELETE FROM users WHERE id = ?').run(id)
 }
 

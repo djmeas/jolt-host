@@ -7,9 +7,8 @@ import { generateUniqueSlug } from '~/server/utils/slug'
 import { hashPassword } from '~/server/utils/password'
 import { createUnlockToken } from '~/server/utils/view-auth'
 import { checkUploadRateLimit, getClientIP } from '~/server/utils/rate-limit'
-import { requireUploadAuthorization, hasValidApiToken } from '~/server/utils/upload-auth'
+import { requireUploadAuthorization, hasValidApiToken, resolveUploadUserId } from '~/server/utils/upload-auth'
 import { verifyTurnstileToken } from '~/server/utils/turnstile'
-import { getUserIdFromEvent } from '~/server/utils/user-auth'
 import { writeUploadContent, isAcceptedUploadFilename, resolveUploadMaxBytes } from '~/server/utils/upload-content'
 
 const STORAGE = getStorageDir()
@@ -91,7 +90,7 @@ export default defineEventHandler(async (event) => {
   const titleRaw = titleField?.data
   const title = titleRaw && Buffer.isBuffer(titleRaw) ? titleRaw.toString('utf8').trim().slice(0, 100) : null
 
-  const userId = getUserIdFromEvent(event) ?? null
+  const userId = resolveUploadUserId(event)
   const user = userId ? findUserById(userId) : null
   if (user && user.never_expire === 1) {
     expiresAt = null

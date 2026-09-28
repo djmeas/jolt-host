@@ -40,8 +40,8 @@ describe('upload-auth', () => {
   }
 
   async function loadUploadAuth() {
-    const { hasValidApiToken, isAuthorizedToUpload } = await import('./upload-auth')
-    return { hasValidApiToken, isAuthorizedToUpload }
+    const { hasValidApiToken, isAuthorizedToUpload, getApiToken, resolveUploadUserId } = await import('./upload-auth')
+    return { hasValidApiToken, isAuthorizedToUpload, getApiToken, resolveUploadUserId }
   }
 
   const createMockEvent = () => ({})
@@ -85,6 +85,39 @@ describe('upload-auth', () => {
       mockGetRequestHeader.mockReturnValue('bearer jolt_abc123')
       mockFindApiTokenByHash.mockReturnValue({ id: '1' })
       expect(hasValidApiToken(createMockEvent() as any)).toBe(true)
+    })
+  })
+
+  describe('resolveUploadUserId', () => {
+    it('returns the token owner when no session cookie is present', async () => {
+      const { resolveUploadUserId } = await loadUploadAuth()
+      mockGetCookie.mockReturnValue(undefined)
+      mockGetRequestHeader.mockReturnValue('Bearer jolt_valid')
+      mockFindApiTokenByHash.mockReturnValue({ id: '1', nickname: 'ci', user_id: 'token-owner' })
+      expect(resolveUploadUserId(createMockEvent() as any)).toBe('token-owner')
+    })
+
+    it('returns null for an unowned token', async () => {
+      const { resolveUploadUserId } = await loadUploadAuth()
+      mockGetCookie.mockReturnValue(undefined)
+      mockGetRequestHeader.mockReturnValue('Bearer jolt_valid')
+      mockFindApiTokenByHash.mockReturnValue({ id: '1', nickname: 'ci', user_id: null })
+      expect(resolveUploadUserId(createMockEvent() as any)).toBeNull()
+    })
+
+    it('prefers the logged-in session user over the token owner', async () => {
+      const { resolveUploadUserId } = await loadUploadAuth()
+      mockGetCookie.mockImplementation((_event, name) => name === 'jolt_user' ? userCookie('session-user') : undefined)
+      mockGetRequestHeader.mockReturnValue('Bearer jolt_valid')
+      mockFindApiTokenByHash.mockReturnValue({ id: '1', nickname: 'ci', user_id: 'token-owner' })
+      expect(resolveUploadUserId(createMockEvent() as any)).toBe('session-user')
+    })
+
+    it('returns null without a session or token', async () => {
+      const { resolveUploadUserId } = await loadUploadAuth()
+      mockGetCookie.mockReturnValue(undefined)
+      mockGetRequestHeader.mockReturnValue(undefined)
+      expect(resolveUploadUserId(createMockEvent() as any)).toBeNull()
     })
   })
 

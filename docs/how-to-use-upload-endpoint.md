@@ -287,10 +287,17 @@ The replacement endpoint (`PUT /api/uploads/[slug]/content`) returns a smaller s
 
 ## API Tokens
 
-API tokens are created in the admin dashboard at `/admin`. To use a token, send it in the `Authorization` header:
+Tokens may be created in two places:
+
+- Registered users create and revoke their own tokens under **Dashboard → Account Settings → API tokens** (`GET/POST /api/user/tokens`, `POST /api/user/tokens/delete`).
+- Admins create tokens in the **API Tokens** tab at `/admin` (`POST /api/admin/tokens`), optionally assigning an owner with `user_id`.
+
+Send a token in the `Authorization` header:
 
 ```
 Authorization: Bearer jolt_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
+
+**Ownership and attribution.** A token can be owned by a registered user. Uploads made with an owned token are attributed to that user, so they appear in that user's dashboard ("My Uploads"). A token with no owner still authorizes uploads, but the resulting sites are unattributed and appear only in the admin dashboard. Token ownership is unrelated to *replacing* a site: the `owner_token` (or a matching login/admin session) is still what authorizes an update.
 
 See the examples above for cURL, JavaScript, and Python usage.

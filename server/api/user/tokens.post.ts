@@ -1,13 +1,12 @@
 import { readBody } from 'h3'
-import { requireAdmin } from '~/server/utils/admin-auth'
-import { insertApiToken, findApiTokenByNickname, findUserById } from '~/server/utils/db'
+import { requireUser } from '~/server/utils/user-auth'
+import { insertApiToken, findApiTokenByNickname } from '~/server/utils/db'
 import { createTokenWithNickname } from '~/server/utils/api-token'
 
 export default defineEventHandler(async (event) => {
-  requireAdmin(event)
+  const userId = requireUser(event)
   const body = await readBody(event).catch(() => ({}))
   const nickname = typeof body?.nickname === 'string' ? body.nickname.trim() : ''
-  const userId = typeof body?.user_id === 'string' && body.user_id.trim() ? body.user_id.trim() : null
   if (!nickname) {
     throw createError({ statusCode: 400, message: 'Nickname is required' })
   }
@@ -17,16 +16,12 @@ export default defineEventHandler(async (event) => {
   if (findApiTokenByNickname(nickname)) {
     throw createError({ statusCode: 409, message: 'A token with this nickname already exists' })
   }
-  if (userId && !findUserById(userId)) {
-    throw createError({ statusCode: 400, message: 'Unknown user' })
-  }
   const { id, raw, hash } = createTokenWithNickname(nickname)
   insertApiToken(id, nickname, hash, userId)
   return {
     token: raw,
     nickname,
     id,
-    user_id: userId,
     message: 'Copy this token now. It will not be shown again.',
   }
 })
