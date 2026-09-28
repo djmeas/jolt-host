@@ -111,6 +111,131 @@ You can delete all My Sites history at any time by clicking the **Clear My Sites
 
 ---
 
+## Publishing from the API
+
+You can publish and update sites from scripts, CI pipelines, or any tool that can make HTTP requests. The API uses the same formats and limits as the web form (`.html`, `.md`, or `.zip`).
+
+### Getting an API token
+
+API tokens are created in the admin dashboard at **`/admin`**. Create a token, copy it once, and keep it secret. Send it on every request:
+
+```
+Authorization: Bearer jolt_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+> The API does not accept anonymous uploads. You need an API token (or a logged-in browser session). If the host runs in **registered-users-only** mode, an API token alone is not enough — you must also be logged in as a registered user.
+
+### Uploading a new site
+
+Send a `multipart/form-data` request to `POST /api/upload` with a `file` field. Add `password`, `expiration` (`1h`, `8h`, `24h`, `1w`, or `1d`), and `title` as optional fields.
+
+```bash
+curl -X POST https://yourdomain.com/api/upload \
+  -H "Authorization: Bearer jolt_YOUR_TOKEN" \
+  -F "file=@./index.html" \
+  -F "expiration=24h" \
+  -F "title=My Site"
+```
+
+The response includes the shareable URL and the **owner token**:
+
+```json
+{
+  "slug": "quick-dragon-42",
+  "url": "https://yourdomain.com/view/quick-dragon-42",
+  "entry_point": "quick-dragon-42/index.html",
+  "owner_token": "abc123...",
+  "url_with_owner_token": "https://yourdomain.com/view/quick-dragon-42?owner_token=abc123...",
+  "url_with_unlock": "https://yourdomain.com/view/quick-dragon-42?unlock=TOKEN"
+}
+```
+
+**Keep the `owner_token`** — it is shown only once and is what lets you update or delete the site later without a logged-in account. Save it somewhere safe.
+
+```javascript
+const form = new FormData()
+form.append('file', fileInput.files[0])
+form.append('expiration', '24h')
+
+const res = await fetch('https://yourdomain.com/api/upload', {
+  method: 'POST',
+  headers: { Authorization: 'Bearer jolt_YOUR_TOKEN' },
+  body: form,
+})
+const data = await res.json()
+console.log(data.url)          // shareable link
+console.log(data.owner_token)  // save this to update or delete later
+```
+
+### Replacing an existing site's files
+
+To publish a new version **at the same URL**, send the full new file set (as a ZIP for multiple files) to `PUT /api/uploads/[slug]/content`. The replacement replaces the *entire* site: any file you leave out stops being served. The URL, title, password, owner token, and expiration all stay the same, and updating does **not** reset the expiration timer.
+
+Provide the site's `owner_token` as a form field (never in the URL). If you are logged in as the owner or are an admin, you do not need the token.
+
+```bash
+# Replace all files for the site at /view/quick-dragon-42
+curl -X PUT https://yourdomain.com/api/uploads/quick-dragon-42/content \
+  -H "Authorization: Bearer jolt_YOUR_TOKEN" \
+  -F "file=@./site-v2.zip" \
+  -F "owner_token=abc123..."
+```
+
+```javascript
+const form = new FormData()
+form.append('file', fileInput.files[0])
+form.append('owner_token', 'abc123...') // omit when logged in as the owner
+
+const res = await fetch('https://yourdomain.com/api/uploads/quick-dragon-42/content', {
+  method: 'PUT',
+  headers: { Authorization: 'Bearer jolt_YOUR_TOKEN' },
+  body: form,
+})
+const { slug, url, entry_point } = await res.json()
+```
+
+On success you get back the unchanged `slug` and `url` plus the new `entry_point`:
+
+```json
+{
+  "slug": "quick-dragon-42",
+  "url": "https://yourdomain.com/view/quick-dragon-42",
+  "entry_point": ".content/quick-dragon-42/8f2c.../index.html"
+}
+```
+
+Notes:
+
+- A ZIP replacement removes the previous files, including the old `index.html` or `index.md`.
+- If the upload is invalid or fails, your existing site keeps working.
+- Requesting a replacement for an expired or deleted site returns an error; it cannot revive a site.
+- The same rate limit applies (25 per hour per IP).
+
+### Managing an existing site
+
+Use the owner token to change settings without re-uploading files:
+
+| Action | Endpoint | Body |
+|---|---|---|
+| Set or change password | `POST /api/paste/[slug]/password` | `{ "owner_token": "...", "password": "..." }` |
+| Set or clear expiration | `POST /api/paste/[slug]/expiration` | `{ "owner_token": "...", "expiration": "24h" }` |
+
+### API errors
+
+| Status | Meaning |
+|---|---|
+| 400 | Missing or invalid file, unsupported format, or failed CAPTCHA |
+| 401 | Missing or invalid token (or no registered-user login when required) |
+| 403 | Token or session is valid but does not own the site |
+| 404 | Site not found or expired |
+| 409 | A concurrent update changed the site first |
+| 413 | File (or expanded ZIP) is too large |
+| 429 | Rate limit exceeded (check the `Retry-After` header) |
+
+For full details and more examples (Python, Postman), see the [upload endpoint reference](https://github.com/djmeas/jolt-host/blob/main/docs/how-to-use-upload-endpoint.md).
+
+---
+
 ## Rate limits
 
 To prevent abuse, uploads from the same IP address are limited to **25 per hour**. If you hit the limit, wait a while and try again.

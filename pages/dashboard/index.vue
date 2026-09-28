@@ -8,6 +8,7 @@ type UploadRow = {
   expires_at: string | null
   password_hash?: string | null
   has_password?: boolean
+  title?: string | null
 }
 
 type UploadsResponse = {
@@ -76,6 +77,10 @@ function buildUrl(slug: string) {
   if (import.meta.client) {
     return `${window.location.origin}/view/${slug}`
   }
+  return `/view/${slug}`
+}
+
+function viewPath(slug: string): string {
   return `/view/${slug}`
 }
 
@@ -319,7 +324,7 @@ async function changePassword() {
             <table class="uploads-table">
               <thead>
                 <tr>
-                  <th class="col-url">URL</th>
+                  <th class="col-url">Site</th>
                   <th class="col-date">Created</th>
                   <th class="col-expires">Expires</th>
                   <th class="col-protected">Password</th>
@@ -329,7 +334,8 @@ async function changePassword() {
               <tbody>
                 <tr v-for="(u, idx) in uploads" :key="u.slug" :class="{ 'row-alt': idx % 2 === 1 }">
                   <td class="col-url">
-                    <a :href="buildUrl(u.slug)" target="_blank" rel="noopener" class="url-link" :title="buildUrl(u.slug)">View</a>
+                    <p v-if="u.title" class="site-title">{{ u.title }}</p>
+                    <a :href="buildUrl(u.slug)" target="_blank" rel="noopener" class="url-link" :title="buildUrl(u.slug)">{{ viewPath(u.slug) }}</a>
                   </td>
                   <td class="col-date muted">{{ formatDate(u.created_at) }}</td>
                   <td class="col-expires muted">
@@ -629,7 +635,6 @@ async function changePassword() {
   font-size: 0.75rem;
   color: #52525b;
 }
-.col-actions { min-width: 60px; text-align: center; }
 .menu-wrapper {
   position: relative;
   display: inline-block;
@@ -680,11 +685,20 @@ async function changePassword() {
 .menu-item.danger:hover {
   background: rgba(248, 113, 113, 0.1);
 }
-.col-url { min-width: 200px; }
-.col-date { min-width: 140px; white-space: nowrap; }
-.col-expires { min-width: 140px; white-space: nowrap; }
-.col-protected { min-width: 80px; }
-.col-actions { min-width: 240px; }
+.col-url { min-width: 200px; text-align: left; }
+.col-date { min-width: 140px; white-space: nowrap; text-align: left; }
+.col-expires { min-width: 140px; white-space: nowrap; text-align: left; }
+.col-protected { min-width: 80px; text-align: left; }
+.uploads-table .col-actions { min-width: 240px; text-align: center; }
+.site-title {
+  margin: 0 0 0.2rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #e4e4e7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .url-link {
   color: #a78bfa;
   text-decoration: none;
