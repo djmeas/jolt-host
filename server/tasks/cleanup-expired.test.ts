@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mockGetExpiredUploadSlugs = vi.fn()
 const mockDeleteUploadBySlug = vi.fn()
 const mockDeleteStorageForSlug = vi.fn()
+const mockGetAllUploadEntryPoints = vi.fn(() => [])
 
 vi.mock('~/server/utils/db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('~/server/utils/db')>()
@@ -10,11 +11,15 @@ vi.mock('~/server/utils/db', async (importOriginal) => {
     ...actual,
     getExpiredUploadSlugs: () => mockGetExpiredUploadSlugs(),
     deleteUploadBySlug: (slug: string) => mockDeleteUploadBySlug(slug),
+    getAllUploadEntryPoints: () => mockGetAllUploadEntryPoints(),
   }
 })
 
 vi.mock('~/server/utils/storage', () => ({
   deleteStorageForSlug: (slug: string) => mockDeleteStorageForSlug(slug),
+  pruneTrash: () => {},
+  pruneStaging: () => {},
+  reconcileContent: () => {},
 }))
 
 // defineTask is a Nitro global — stub it so the module evaluates correctly in Vitest

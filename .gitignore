@@ -31,6 +31,9 @@ pnpm-debug.log*
 # Test / coverage
 coverage
 .nyc_output
+test/tmp-data
+test/tmp-storage
+test/.integration-env.json
 
 # Build caches
 .cache

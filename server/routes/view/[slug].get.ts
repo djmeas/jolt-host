@@ -41,6 +41,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: 'File not found' })
   }
 
+  // Content can be replaced without changing the URL; never serve a stale entry page.
+  setHeader(event, 'Cache-Control', 'no-store')
+
   // Redirect /view/slug → /view/slug/ so relative URLs in the HTML (e.g. assets/image.png)
   // resolve to /view/slug/assets/image.png instead of /view/assets/image.png
   const url = getRequestURL(event)

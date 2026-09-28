@@ -35,6 +35,7 @@ For the **admin dashboard** at `/admin`, set an admin password (see [Environment
   - Copy the result to clipboard or download as `index.html`
   - Entirely client-side — nothing is published or saved to the server
 - **Short slugs** (e.g. `quick-apple-42`) for URLs like `yoursite.com/view/quick-apple-42`
+- **Update an existing site** — replace a site's entire published file set through its original URL. Settings (title, password, owner token, creation date, expiration), the slug, and the URL stay the same; files omitted from the replacement stop being served. See `PUT /api/uploads/[slug]/content` and the `/update/[slug]` form.
 - **Static serving** — `/view/[slug]` serves the entry `index.html`; `/view/[slug]/**` serves assets (CSS, JS, images) with correct `Content-Type`
 - **Password protection** — optional password per paste; visitors see an unlock page; you get a shareable **unlock URL** (`?unlock=TOKEN`) so they can view without typing the password
 - **Expiration** — optional auto-delete: `1h`, `8h`, `24h`, `1w`, or `1d`
@@ -64,6 +65,26 @@ For the **admin dashboard** at `/admin`, set an admin password (see [Environment
 
 Upload size limit: default 25MB; set **`NUXT_JOLTHOST_UPLOAD_MAX_BYTES`** (bytes) to change (e.g. `52428800` for 50MB).
 
+### Replace an existing site's content
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `PUT` | `/api/uploads/[slug]/content` | Owner (user login, owner token, or admin) | `multipart/form-data`: `file` (`.html`, `.md`, or `.zip`) and optional `owner_token`. Replaces the **entire** published file set. Returns the unchanged `slug` and `url` plus the new `entry_point`. Existing title, password, owner token, `created_at`, and `expires_at` are preserved; updating does not restart expiration and never issues a new owner token. |
+
+Ownership is checked against the target site, not the request's general upload credentials:
+
+- A signed-in user can update a site they own.
+- An admin session can update any site.
+- In open publishing mode (default), a site's owner token authorizes an update.
+- A web upload session or API token is **not** ownership proof and cannot update someone else's site.
+- With `REGISTERED_USERS_ONLY=true`, an owner token alone is insufficient — a logged-in user is still required. For an older anonymous upload in that mode, both a login and its owner token are required.
+
+Send the owner token as a form field, never in the URL. The same rate limit, size policy, and CAPTCHA policy as creation apply; an API token only keeps its CAPTCHA exemption when the request also proves ownership via `owner_token`.
+
+Errors: `400` invalid file or ZIP, `401` unauthenticated, `403` insufficient ownership, `404` missing or expired site, `409` concurrent update, `413` oversized file, `429` rate limited.
+
+Note: `/api/paste` and `/api/markdown` create single-file pastes and are not used for replacements. Replacing is a full swap: a ZIP replacement removes the previous `index.md` or single `index.html` too.
+
 ### Manage a paste (owner token)
 
 | Method | Endpoint | Body | Description |
@@ -89,7 +110,7 @@ More detail and examples: [docs/how-to-use-upload-endpoint.md](docs/how-to-use-u
 ## Data
 
 - **Database** — `./data/jolt.db` (SQLite). Tables: `uploads` (`id`, `slug`, `entry_point`, `password_hash`, `owner_token`, `created_at`, `expires_at`), `api_tokens` (`id`, `nickname`, `token_hash`, `created_at`).
-- **Files** — `./storage/[slug]/` — one folder per paste.
+- **Files** — new uploads are stored as `./storage/[slug]/`. After an update, the current file set lives under `./storage/.content/[slug]/[generation-id]/`, and the row's `entry_point` points at the active generation. Replaced generations are moved to `./storage/.trash/` for a short grace period, and abandoned staging under `./storage/.staging/` is pruned by the scheduled cleanup task.
 
 ## Environment
 
@@ -126,3 +147,4 @@ App is at [http://localhost:3000](http://localhost:3000). On a VPS, put a revers
 - `npm run test:unit` — unit tests (server)
 - `npm run test:integration` — integration tests
 - `npm run test:fixtures` — rebuild test fixtures (e.g. dummy ZIP)
+- `node scripts/build-escape-fixture.mjs` — rebuild the path-escaping ZIP fixture used by security tests

@@ -48,6 +48,8 @@ export default defineEventHandler(async (event) => {
     const indexInDir = path.join(filePath, 'index.html')
     if (existsSync(indexInDir)) {
       setHeader(event, 'Content-Type', 'text/html')
+      // Assets can be replaced without changing the URL; revalidate every request.
+      setHeader(event, 'Cache-Control', 'no-cache')
       return sendStream(event, createReadStream(indexInDir))
     }
     throw createError({ statusCode: 404, message: 'Not found' })
@@ -55,5 +57,6 @@ export default defineEventHandler(async (event) => {
 
   const mimeType = mime.lookup(filePath) || 'application/octet-stream'
   setHeader(event, 'Content-Type', mimeType)
+  setHeader(event, 'Cache-Control', 'no-cache')
   return sendStream(event, createReadStream(filePath))
 })
