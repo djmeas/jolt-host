@@ -47,6 +47,7 @@ function getDb(): Database.Database {
     addColumnIfMissing('uploads', 'owner_token', 'TEXT')
     addColumnIfMissing('uploads', 'expires_at', 'TEXT')
     addColumnIfMissing('uploads', 'title', 'TEXT')
+    addColumnIfMissing('uploads', 'data_enabled', 'INTEGER NOT NULL DEFAULT 0')
 
     db.exec(`
       CREATE TABLE IF NOT EXISTS users (
@@ -110,8 +111,11 @@ export function insertUpload(
 export function updatePasswordBySlugAndOwnerToken(slug: string, ownerToken: string, passwordHash: string): boolean {
   const database = getDb()
   const info = database.prepare(
-    'UPDATE uploads SET password_hash = ? WHERE slug = ? AND owner_token = ?'
-  ).run(passwordHash, slug, ownerToken)
+    `UPDATE uploads
+     SET password_hash = ?,
+         data_enabled = CASE WHEN ? IS NULL THEN 0 ELSE data_enabled END
+     WHERE slug = ? AND owner_token = ?`
+  ).run(passwordHash, passwordHash, slug, ownerToken)
   return info.changes === 1
 }
 
@@ -159,12 +163,44 @@ export type UserRow = {
   updated_at: string
 }
 
-export type UploadRow = { id: string; slug: string; entry_point: string; password_hash: string | null; owner_token: string | null; created_at: string; expires_at: string | null; user_id: string | null; title: string | null }
+export type UploadRow = { id: string; slug: string; entry_point: string; password_hash: string | null; owner_token: string | null; created_at: string; expires_at: string | null; user_id: string | null; title: string | null; data_enabled: number }
 
 export function findUploadBySlug(slug: string): UploadRow | undefined {
   const database = getDb()
-  const row = database.prepare('SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id, title FROM uploads WHERE slug = ?').get(slug) as UploadRow | undefined
+  const row = database.prepare('SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id, title, data_enabled FROM uploads WHERE slug = ?').get(slug) as UploadRow | undefined
   return row
+}
+
+/** Returns the immutable id of every upload; used to reconcile per-site data files. */
+export function getAllUploadIds(): string[] {
+  const database = getDb()
+  const rows = database.prepare('SELECT id FROM uploads').all() as { id: string }[]
+  return rows.map((r) => r.id)
+}
+
+/**
+ * Enables the data API only while the row exists, still has a password, and is
+ * unexpired. The predicate is part of the statement, so a password cleared (or
+ * an expiration applied) between the ownership check and this update cannot be
+ * raced into an unprotected site having data enabled. Returns false when no row
+ * matched.
+ */
+export function enableDataBySlug(slug: string): boolean {
+  const database = getDb()
+  const info = database.prepare(
+    `UPDATE uploads SET data_enabled = 1
+     WHERE slug = ?
+       AND password_hash IS NOT NULL
+       AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`
+  ).run(slug)
+  return info.changes === 1
+}
+
+/** Disables the data API. Records are retained when data is disabled. */
+export function disableDataBySlug(slug: string): boolean {
+  const database = getDb()
+  const info = database.prepare('UPDATE uploads SET data_enabled = 0 WHERE slug = ?').run(slug)
+  return info.changes === 1
 }
 
 /** Returns slugs of uploads whose expires_at is set and in the past. */
@@ -200,13 +236,14 @@ export type UploadListItem = {
   expires_at: string | null
   has_password: boolean
   title: string | null
+  data_enabled: boolean
 }
 
 export function getAllUploads(): UploadListItem[] {
   const database = getDb()
   const rows = database
     .prepare(
-      `SELECT id, slug, entry_point, created_at, expires_at, title,
+      `SELECT id, slug, entry_point, created_at, expires_at, title, data_enabled,
         CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END as has_password
        FROM uploads ORDER BY created_at DESC`
     )
@@ -219,6 +256,7 @@ export function getAllUploads(): UploadListItem[] {
     expires_at: r.expires_at,
     has_password: r.has_password === 1,
     title: r.title,
+    data_enabled: r.data_enabled === 1,
   }))
 }
 
@@ -266,7 +304,7 @@ export function getUploadsPaginated(filter: UploadsFilter = {}): {
 
   const rows = database
     .prepare(
-      `SELECT id, slug, entry_point, created_at, expires_at, title,
+      `SELECT id, slug, entry_point, created_at, expires_at, title, data_enabled,
         CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END as has_password
        FROM uploads ${whereClause}
        ORDER BY created_at DESC
@@ -282,6 +320,7 @@ export function getUploadsPaginated(filter: UploadsFilter = {}): {
     expires_at: r.expires_at,
     has_password: r.has_password === 1,
     title: r.title,
+    data_enabled: r.data_enabled === 1,
   }))
 
   return { items, total, page, limit }
@@ -295,7 +334,13 @@ export function updateExpirationBySlug(slug: string, expiresAt: string | null): 
 
 export function updatePasswordBySlug(slug: string, passwordHash: string | null): boolean {
   const database = getDb()
-  const info = database.prepare('UPDATE uploads SET password_hash = ? WHERE slug = ?').run(passwordHash, slug)
+  // Clearing the password also disables the data API (records are retained).
+  const info = database.prepare(
+    `UPDATE uploads
+     SET password_hash = ?,
+         data_enabled = CASE WHEN ? IS NULL THEN 0 ELSE data_enabled END
+     WHERE slug = ?`
+  ).run(passwordHash, passwordHash, slug)
   return info.changes === 1
 }
 
@@ -442,7 +487,7 @@ export function getUploadsByUserId(userId: string, page: number, limit: number):
   const countRow = database.prepare('SELECT COUNT(*) as n FROM uploads WHERE user_id = ?').get(userId) as { n: number }
   const total = countRow.n
   const rows = database.prepare(
-    'SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id, title FROM uploads WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    'SELECT id, slug, entry_point, password_hash, owner_token, created_at, expires_at, user_id, title, data_enabled FROM uploads WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
   ).all(userId, l, offset) as UploadRow[]
   return { items: rows, total }
 }

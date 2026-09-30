@@ -72,6 +72,21 @@ Jolt Host sets the following first-party cookies:
 |---|---|---|---|
 | `jolt_web` | Proves you arrived via the web form, allowing anonymous uploads without an API token | 24 hours | No — contains only a signed timestamp |
 | `jolt_user` | Keeps you logged in to your account | 30 days | Yes — contains your signed account ID |
+| `jolt_view` | Remembers that you unlocked a password-protected site (via the password or an unlock link) so you can view it | 30 days | No — contains the site slug, an expiry, and a signature |
+| `jolt_data` | Proves you entered the password for a data-enabled site, allowing you to edit that site's shared records | 24 hours | No — contains the site's internal id, an expiry, and a signature |
+
+The `jolt_view` and `jolt_data` cookies are set on the site's own hosted origin, not on the main
+application origin. They differ in how a password change affects them:
+
+- **`jolt_data` is revoked server-side.** It is bound to the hash of the site's current password, so
+  changing (or clearing) the password — or disabling site data, deleting the site, or letting it
+  expire — makes the server reject it immediately, even if your browser still holds it.
+- **`jolt_view` is not revoked by a password change.** It is a signed, slug-bound credential that
+  keeps granting view-only access on that browser for the rest of its 30-day lifetime, so a visitor
+  who already unlocked the site can keep reading it until the cookie expires, the site is deleted or
+  expires, or they clear their browser data. Changing the site password does not kick out an
+  already-unlocked viewer; it only stops the old password (and old data-admin sessions) from granting
+  new access or any write access.
 
 No third-party cookies are set. No tracking or advertising cookies are used.
 
@@ -103,12 +118,36 @@ No other third-party services receive your data.
 
 ---
 
+## Site data (owner-published visitor data)
+
+A password-protected site can opt in to a small JSON data API. When it is enabled, visitors who
+enter the site password (or use an API write session) can store and edit records for that site.
+Those records — which the site owner's visitors choose to submit — are stored in a private SQLite
+file on the server and are **shared by everyone who has the password**.
+
+- The records are published under the owner's responsibility. Do not configure a site to collect
+  personal, confidential, or sensitive information unless you are entitled to hold it, and tell your
+  visitors what you collect.
+- Records are served only through the API on the site's own hosted origin. The database file itself
+  is never downloadable, and it is not part of your uploaded files.
+- An unlock link grants read-only access to these records; entering the password grants read and
+  write access. There is no per-visitor private data and no audit log of who changed what.
+- Disabling site data, or clearing the site password, hides the records but keeps them. Setting a new
+  password and re-enabling the feature reveals the same records to whoever holds the new password.
+- Deleting the site, or letting it expire, deletes the records along with the rest of the site.
+
+To have the data of a site you own removed, delete the site (owner token or dashboard) or contact us
+with the site's slug.
+
+---
+
 ## Data retention
 
 | Data | Deleted when |
 |---|---|
 | Uploaded files | The expiration time passes and the cleanup task runs |
 | Upload records in the database | Same — deleted with the file |
+| Site data (shared records) | The site is deleted, or it expires and the cleanup task runs |
 | Rate-limit records | Server restarts |
 
 If you did not set an expiration, your upload persists until an administrator removes it or you use your owner token to delete it.

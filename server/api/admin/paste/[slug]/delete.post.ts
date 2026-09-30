@@ -2,6 +2,7 @@ import { getRouterParam } from 'h3'
 import { requireAdmin } from '~/server/utils/admin-auth'
 import { deleteUploadBySlug, findUploadBySlug } from '~/server/utils/db'
 import { deleteStorageForSlug } from '~/server/utils/storage'
+import { deleteSiteData } from '~/server/utils/site-data'
 
 export default defineEventHandler((event) => {
   requireAdmin(event)
@@ -15,5 +16,6 @@ export default defineEventHandler((event) => {
   }
   deleteStorageForSlug(slug)
   deleteUploadBySlug(slug)
+  deleteSiteData(row.id)
   return { ok: true }
 })

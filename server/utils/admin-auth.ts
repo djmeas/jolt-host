@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import { getCookie, setCookie, deleteCookie } from 'h3'
 import type { H3Event } from 'h3'
+import { isProductionRuntime } from '~/server/utils/runtime-mode'
 
 const COOKIE_NAME = 'jolt_admin'
 const SESSION_MAX_AGE_SEC = 24 * 60 * 60 // 24 hours
@@ -37,7 +38,7 @@ export function setAdminCookie(event: H3Event): void {
     path: '/',
     maxAge: SESSION_MAX_AGE_SEC,
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProductionRuntime(),
     sameSite: 'lax',
   })
 }

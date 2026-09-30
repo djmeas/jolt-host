@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import { getCookie, setCookie } from 'h3'
 import type { H3Event } from 'h3'
+import { isProductionRuntime } from '~/server/utils/runtime-mode'
 
 const COOKIE_NAME = 'jolt_view'
 const COOKIE_MAX_AGE_DAYS = 30
@@ -60,7 +61,7 @@ export function setViewAuthCookie(event: H3Event, slug: string): void {
     path: '/',
     maxAge,
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProductionRuntime(),
     sameSite: 'lax',
   })
 }

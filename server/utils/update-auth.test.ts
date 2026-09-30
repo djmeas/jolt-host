@@ -47,6 +47,7 @@ function row(overrides: Partial<UploadRow> = {}): UploadRow {
     expires_at: null,
     user_id: null,
     title: null,
+    data_enabled: 0,
     ...overrides,
   }
 }

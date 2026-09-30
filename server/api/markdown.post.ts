@@ -6,6 +6,7 @@ import { getStorageDir, insertUpload, slugExists, findUserById } from '~/server/
 import { generateUniqueSlug } from '~/server/utils/slug'
 import { hashPassword } from '~/server/utils/password'
 import { createUnlockToken } from '~/server/utils/view-auth'
+import { canonicalSiteUrl, getSiteHostConfig } from '~/server/utils/site-host'
 import { checkUploadRateLimit, getClientIP } from '~/server/utils/rate-limit'
 import { requireUploadAuthorization, hasValidApiToken, resolveUploadUserId } from '~/server/utils/upload-auth'
 import { verifyTurnstileToken } from '~/server/utils/turnstile'
@@ -96,6 +97,17 @@ export default defineEventHandler(async (event) => {
   const slug = generateUniqueSlug(slugExists)
   const id = randomUUID()
   const ownerToken = randomBytes(24).toString('base64url')
+
+  // Fail closed before anything is persisted, so a misconfigured deployment can
+  // never leave a published row and files with no canonical URL to return.
+  const url = canonicalSiteUrl(slug)
+  if (!url) {
+    throw createError({
+      statusCode: 503,
+      message: `Hosted site origins are not configured on this server: ${getSiteHostConfig().reason ?? 'unknown reason'}`,
+    })
+  }
+
   const uploadDir = path.join(STORAGE, slug)
 
   if (!existsSync(uploadDir)) {
@@ -108,14 +120,11 @@ export default defineEventHandler(async (event) => {
 
   insertUpload(id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId, title || null)
 
-  const baseUrl = getRequestURL(event).origin
-  const url = `${baseUrl}/view/${slug}`
   const response: Record<string, string> = {
     slug,
     url,
     entry_point: entryPoint,
     owner_token: ownerToken,
-    url_with_owner_token: `${url}?owner_token=${encodeURIComponent(ownerToken)}`,
     expires_at: expiresAt ?? '',
     title: title || '',
   }

@@ -107,7 +107,12 @@ You can delete all My Sites history at any time by clicking the **Clear My Sites
 - Your link is public — anyone who has it can view your site
 - If you want to limit access, use the password option
 - There is no "private" mode beyond password protection
-- Links look like: `https://yourdomain.com/view/abc123`
+- Links look like: `https://quick-dragon-7f3a9c.sites.example.net/` — each site is served from its own
+  host on the hosted-site domain, separate from the app. Older `/view/<slug>` links on the app domain
+  still work: they redirect to the same hosted URL. Only the `?unlock=` token is carried across a
+  redirect; owner tokens and passwords are stripped.
+- A site with the optional data API enabled can also read and edit that site's shared records. See
+  [jolt-data-api.md](jolt-data-api.md).
 
 ---
 
@@ -149,13 +154,14 @@ The response includes the shareable URL and the **owner token**:
 ```json
 {
   "slug": "quick-dragon-7f3a9c",
-  "url": "https://yourdomain.com/view/quick-dragon-7f3a9c",
+  "url": "https://quick-dragon-7f3a9c.sites.example.net/",
   "entry_point": "quick-dragon-7f3a9c/index.html",
   "owner_token": "abc123...",
-  "url_with_owner_token": "https://yourdomain.com/view/quick-dragon-7f3a9c?owner_token=abc123...",
-  "url_with_unlock": "https://yourdomain.com/view/quick-dragon-7f3a9c?unlock=TOKEN"
+  "url_with_unlock": "https://quick-dragon-7f3a9c.sites.example.net/?unlock=TOKEN"
 }
 ```
+
+`url` is the canonical public URL on the hosted-site origin; `url_with_unlock` is only present when you set a password. The owner token is returned only in this one-time JSON response — it is never part of a URL.
 
 Slugs are generated as `adjective-noun-hash` (for example `mystic-ninja-b589aa`). The trailing hash is random, so use the exact `slug` from the response rather than constructing one yourself.
 
@@ -185,7 +191,7 @@ To publish a new version **at the same URL**, send the full new file set (as a Z
 Provide the site's `owner_token` as a form field (never in the URL). With a valid API token, the `owner_token` is what proves you own the site — so an API token plus the owner token is enough to replace a site, even in **registered-users-only** mode, without logging in. If you are logged in as the owner, or are an admin, you do not need the owner token.
 
 ```bash
-# Replace all files for the site at /view/quick-dragon-7f3a9c
+# Replace all files for the site quick-dragon-7f3a9c
 curl -X PUT https://yourdomain.com/api/uploads/quick-dragon-7f3a9c/content \
   -H "Authorization: Bearer jolt_YOUR_TOKEN" \
   -F "file=@./site-v2.zip" \
@@ -210,7 +216,7 @@ On success you get back the unchanged `slug` and `url` plus the new `entry_point
 ```json
 {
   "slug": "quick-dragon-7f3a9c",
-  "url": "https://yourdomain.com/view/quick-dragon-7f3a9c",
+  "url": "https://quick-dragon-7f3a9c.sites.example.net/",
   "entry_point": ".content/quick-dragon-7f3a9c/8f2c.../index.html"
 }
 ```

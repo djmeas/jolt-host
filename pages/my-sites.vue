@@ -22,7 +22,11 @@ function formatDate(iso: string | null): string {
 function slugFromUrl(url: string): string | null {
   try {
     const base = import.meta.client ? window.location.origin : 'http://localhost'
-    const match = new URL(url, base).pathname.match(/\/view\/([^/]+)\/?$/)
+    const parsed = new URL(url, base)
+    const legacy = parsed.pathname.match(/\/view\/([^/]+)\/?$/)
+    if (legacy) return legacy[1]
+    // Canonical hosted URLs put the slug first: <slug>.<site base domain>.
+    const match = parsed.hostname.match(/^([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\.\S+$/)
     return match?.[1] ?? null
   } catch {
     return null

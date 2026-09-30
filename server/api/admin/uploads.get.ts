@@ -1,6 +1,7 @@
 import { getQuery } from 'h3'
 import { requireAdmin } from '~/server/utils/admin-auth'
 import { getUploadsPaginated } from '~/server/utils/db'
+import { canonicalSiteUrl } from '~/server/utils/site-host'
 
 export default defineEventHandler((event) => {
   requireAdmin(event)
@@ -21,11 +22,10 @@ export default defineEventHandler((event) => {
     limit,
   })
 
-  const baseUrl = getRequestURL(event).origin
   return {
     items: items.map((u) => ({
       ...u,
-      url: `${baseUrl}/view/${u.slug}`,
+      url: canonicalSiteUrl(u.slug) ?? '',
     })),
     total,
     page: p,

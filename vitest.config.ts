@@ -16,5 +16,8 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '**/dist/**', 'test/nuxt/**'],
     setupTimeout: 120000,
     testTimeout: 15000,
+    // The server unit tests share one on-disk SQLite fixture
+    // (test/tmp-data/jolt.db), so files must not interleave their inserts.
+    fileParallelism: false,
   },
 })

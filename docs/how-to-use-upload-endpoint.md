@@ -10,6 +10,7 @@ Upload HTML files, Markdown files, or ZIP archives — or paste raw HTML/Markdow
 | `POST /api/paste` | `application/json` | Paste raw HTML as a hosted page |
 | `POST /api/markdown` | `application/json` | Paste raw Markdown as a rendered, themed page |
 | `PUT /api/uploads/[slug]/content` | `multipart/form-data` | Replace the entire published file set of an existing site |
+| `PUT /api/uploads/[slug]/data` | `application/json` | Opt a password-protected site in or out of the [site data API](jolt-data-api.md) |
 
 ## Authentication
 
@@ -70,7 +71,7 @@ Markdown pastes are rendered server-side and displayed with a floating theme swi
 
 ## `PUT /api/uploads/[slug]/content` — Replace a site
 
-Replaces the **entire** published file set for an existing site while keeping its row, slug, and `/view/[slug]` URL. Files omitted from the replacement stop being served; there is no version history or rollback.
+Replaces the **entire** published file set for an existing site while keeping its row, slug, and canonical hosted URL. Files omitted from the replacement stop being served; there is no version history or rollback.
 
 **Content-Type:** `multipart/form-data`
 
@@ -79,7 +80,7 @@ Replaces the **entire** published file set for an existing site while keeping it
 | `file`        | File   | Yes      | An `.html` file, `.md` file, or `.zip` archive containing the full new site |
 | `owner_token` | String | No       | The site's owner token, when ownership is not proven by a login or admin session |
 
-**What stays the same:** the slug, `/view/[slug]` URL, title, password (and its unlock link), owner token, `created_at`, and `expires_at`. Updating content does not restart expiration and never issues a new owner token. The response contains only `slug`, `url`, and `entry_point` — the owner token is never echoed back.
+**What stays the same:** the slug, the canonical hosted URL, title, password (and its unlock link), owner token, `created_at`, and `expires_at`. Updating content does not restart expiration and never issues a new owner token. The response contains only `slug`, `url`, and `entry_point` — the owner token is never echoed back.
 
 **What changes:** the stored file set and the `entry_point`. A ZIP's entry point is chosen the same way as at creation (`index.html` at the root first, otherwise the first HTML file alphabetically, including nested paths).
 
@@ -119,7 +120,7 @@ Pass `owner_token` as a form field, never in the URL or query string.
 ### Example
 
 ```bash
-# Replace the files at /view/quick-dragon-42, keeping the same URL
+# Replace the files at quick-dragon-42, keeping the same URL
 curl -X PUT https://your-host.com/api/uploads/quick-dragon-42/content \
   -F "file=@./site-v2.zip" \
   -F "owner_token=abc123..."
@@ -247,27 +248,25 @@ The create endpoints (`/api/upload`, `/api/paste`, `/api/markdown`) return the s
 ```json
 {
   "slug": "quick-dragon-42",
-  "url": "https://your-host.com/view/quick-dragon-42",
+  "url": "https://quick-dragon-42.sites.example.net/",
   "entry_point": "quick-dragon-42/index.md",
   "owner_token": "abc123...",
-  "url_with_owner_token": "https://your-host.com/view/quick-dragon-42?owner_token=abc123...",
-  "url_with_unlock": "https://your-host.com/view/quick-dragon-42?unlock=TOKEN"
+  "url_with_unlock": "https://quick-dragon-42.sites.example.net/?unlock=TOKEN"
 }
 ```
 
 - **slug** — unique identifier for the paste
-- **url** — public URL to view the paste
+- **url** — canonical public URL, on the hosted-site origin (`<slug>.<JOLT_SITE_BASE_ORIGIN host>/`)
 - **entry_point** — path to the stored file (`index.html`, `index.md`, or the ZIP entry point)
-- **owner_token** — use to update password or expiration via `/api/paste/[slug]/password` and `/api/paste/[slug]/expiration`
-- **url_with_owner_token** — full URL with owner token in query string
-- **url_with_unlock** — *(only when password set)* shareable URL with a signed token that auto-unlocks the page; expires when the paste expires (or in 30 days if no expiration)
+- **owner_token** — use to update password or expiration via `/api/paste/[slug]/password` and `/api/paste/[slug]/expiration`, to replace files, or to delete the site. It is returned only in this response and never appears in a URL.
+- **url_with_unlock** — *(only when password set)* shareable URL with a signed token that auto-unlocks the page for viewing; expires when the paste expires (or in 30 days if no expiration). It grants read-only access to a data-enabled site.
 
 The replacement endpoint (`PUT /api/uploads/[slug]/content`) returns a smaller shape (200):
 
 ```json
 {
   "slug": "quick-dragon-42",
-  "url": "https://your-host.com/view/quick-dragon-42",
+  "url": "https://quick-dragon-42.sites.example.net/",
   "entry_point": ".content/quick-dragon-42/8f2c.../index.html"
 }
 ```

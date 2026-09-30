@@ -91,6 +91,8 @@ vi.mock('~/server/utils/user-auth', () => ({
 
 vi.stubGlobal('defineEventHandler', (fn: unknown) => fn)
 vi.stubGlobal('useRuntimeConfig', () => ({ jolthost: { uploadMaxBytes: 25 * 1024 * 1024 } }))
+vi.stubEnv('JOLT_APP_ORIGIN', 'http://app.test')
+vi.stubEnv('JOLT_SITE_BASE_ORIGIN', 'http://sites.test')
 
 function row(overrides: Partial<UploadRow> = {}): UploadRow {
   return {
@@ -103,6 +105,7 @@ function row(overrides: Partial<UploadRow> = {}): UploadRow {
     expires_at: null,
     user_id: null,
     title: null,
+    data_enabled: 0,
     ...overrides,
   }
 }
@@ -142,13 +145,38 @@ describe('PUT /api/uploads/[slug]/content handler', () => {
 
     expect(result).toEqual({
       slug: 'slug',
-      url: 'http://host.test/view/slug',
+      url: 'http://slug.sites.test/',
       entry_point: '.content/slug/u2/index.html',
     })
     expect(result).not.toHaveProperty('owner_token')
     expect(mocks.writeUploadContent).toHaveBeenCalled()
     expect(mocks.updateEntryPointIfUnchanged).toHaveBeenCalledWith('slug', 'slug/index.html', '.content/slug/u2/index.html')
     expect(mocks.retireContentPath).toHaveBeenCalledWith('/fake/storage/slug')
+  })
+
+  it('returns 503 without staging, writing, or switching when the hosted origin is unusable', async () => {
+    const previous = {
+      NODE_ENV: process.env.NODE_ENV,
+      JOLT_APP_ORIGIN: process.env.JOLT_APP_ORIGIN,
+      JOLT_SITE_BASE_ORIGIN: process.env.JOLT_SITE_BASE_ORIGIN,
+    }
+    // Production requires HTTPS origins, so this pair cannot serve sites.
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('JOLT_APP_ORIGIN', 'http://host.example.com')
+    vi.stubEnv('JOLT_SITE_BASE_ORIGIN', 'http://sites.example.net')
+    try {
+      const handler = await loadHandler()
+      await expect(handler({})).rejects.toMatchObject({ statusCode: 503 })
+      expect(mocks.createStagingDir).not.toHaveBeenCalled()
+      expect(mocks.writeUploadContent).not.toHaveBeenCalled()
+      expect(mocks.publishStagedDir).not.toHaveBeenCalled()
+      expect(mocks.updateEntryPointIfUnchanged).not.toHaveBeenCalled()
+      expect(mocks.retireContentPath).not.toHaveBeenCalled()
+    } finally {
+      vi.stubEnv('NODE_ENV', previous.NODE_ENV ?? 'test')
+      vi.stubEnv('JOLT_APP_ORIGIN', previous.JOLT_APP_ORIGIN ?? '')
+      vi.stubEnv('JOLT_SITE_BASE_ORIGIN', previous.JOLT_SITE_BASE_ORIGIN ?? '')
+    }
   })
 
   it('returns 404 when the site does not exist', async () => {
