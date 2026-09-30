@@ -13,11 +13,8 @@ onMounted(() => {
 const deleting = ref(false)
 const error = ref<string | null>(null)
 
-const siteUrl = computed(() => {
-  if (import.meta.client) return `${window.location.origin}/view/${slug}`
-  const req = useRequestURL()
-  return `${req.origin}/view/${slug}`
-})
+const { siteUrlFor } = useSiteUrl()
+const siteUrl = computed(() => siteUrlFor(slug))
 
 async function confirmDelete() {
   deleting.value = true

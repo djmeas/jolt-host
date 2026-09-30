@@ -1,4 +1,4 @@
-import { readMultipartFormData, getRouterParam, setResponseHeader, getRequestURL, createError } from 'h3'
+import { readMultipartFormData, getRouterParam, setResponseHeader, createError } from 'h3'
 import path from 'path'
 import { randomUUID } from 'crypto'
 import { getStorageDir, findUploadBySlug, findUserById, updateEntryPointIfUnchanged } from '~/server/utils/db'
@@ -16,6 +16,7 @@ import {
   resolveUploadMaxBytes,
 } from '~/server/utils/upload-content'
 import { authorizeContentUpdate } from '~/server/utils/update-auth'
+import { canonicalSiteUrl, getSiteHostConfig } from '~/server/utils/site-host'
 import { checkUploadRateLimit, getClientIP } from '~/server/utils/rate-limit'
 import { hasValidApiToken } from '~/server/utils/upload-auth'
 import { verifyTurnstileToken } from '~/server/utils/turnstile'
@@ -67,6 +68,16 @@ export default defineEventHandler(async (event) => {
 
   const ownerToken = readFormField(form, 'owner_token')
   authorizeContentUpdate(event, row, ownerToken, hasValidApiToken(event))
+
+  // Fail closed before staging or switching anything: an unconfigured deployment
+  // must not publish a replacement it cannot return a canonical URL for.
+  const url = canonicalSiteUrl(slug)
+  if (!url) {
+    throw createError({
+      statusCode: 503,
+      message: `Hosted site origins are not configured on this server: ${getSiteHostConfig().reason ?? 'unknown reason'}`,
+    })
+  }
 
   const file = form.find((f) => f.name === 'file')
   if (!file?.data) {
@@ -145,10 +156,9 @@ export default defineEventHandler(async (event) => {
   pruneStaging()
   pruneTrash()
 
-  const baseUrl = getRequestURL(event).origin
   return {
     slug,
-    url: `${baseUrl}/view/${slug}`,
+    url,
     entry_point: newEntryPoint,
   }
 })

@@ -1,6 +1,7 @@
 import { getQuery } from 'h3'
 import { requireUser } from '~/server/utils/user-auth'
 import { getUploadsByUserId } from '~/server/utils/db'
+import { canonicalSiteUrl } from '~/server/utils/site-host'
 
 export default defineEventHandler((event) => {
   const userId = requireUser(event)
@@ -11,7 +12,11 @@ export default defineEventHandler((event) => {
   const { items, total } = getUploadsByUserId(userId, page, limit)
 
   return {
-    items,
+    items: items.map((u) => ({
+      ...u,
+      data_enabled: u.data_enabled === 1,
+      url: canonicalSiteUrl(u.slug) ?? '',
+    })),
     total,
     page,
     limit,

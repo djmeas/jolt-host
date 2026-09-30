@@ -4,6 +4,10 @@ const mockGetExpiredUploadSlugs = vi.fn()
 const mockDeleteUploadBySlug = vi.fn()
 const mockDeleteStorageForSlug = vi.fn()
 const mockGetAllUploadEntryPoints = vi.fn(() => [])
+const mockFindUploadBySlug = vi.fn()
+const mockGetAllUploadIds = vi.fn(() => [])
+const mockDeleteSiteData = vi.fn()
+const mockReconcileSiteData = vi.fn()
 
 vi.mock('~/server/utils/db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('~/server/utils/db')>()
@@ -12,8 +16,15 @@ vi.mock('~/server/utils/db', async (importOriginal) => {
     getExpiredUploadSlugs: () => mockGetExpiredUploadSlugs(),
     deleteUploadBySlug: (slug: string) => mockDeleteUploadBySlug(slug),
     getAllUploadEntryPoints: () => mockGetAllUploadEntryPoints(),
+    findUploadBySlug: (slug: string) => mockFindUploadBySlug(slug),
+    getAllUploadIds: () => mockGetAllUploadIds(),
   }
 })
+
+vi.mock('~/server/utils/site-data', () => ({
+  deleteSiteData: (id: string) => mockDeleteSiteData(id),
+  reconcileSiteData: (ids: string[]) => mockReconcileSiteData(ids),
+}))
 
 vi.mock('~/server/utils/storage', () => ({
   deleteStorageForSlug: (slug: string) => mockDeleteStorageForSlug(slug),
@@ -58,6 +69,19 @@ describe('cleanup-expired task', () => {
     expect(mockDeleteStorageForSlug).toHaveBeenCalledWith('slug-b')
     expect(mockDeleteUploadBySlug).toHaveBeenCalledWith('slug-a')
     expect(mockDeleteUploadBySlug).toHaveBeenCalledWith('slug-b')
+  })
+
+  it('deletes the site database for each expired upload and reconciles orphans', async () => {
+    mockGetExpiredUploadSlugs.mockReturnValue(['slug-a'])
+    mockDeleteUploadBySlug.mockReturnValue(true)
+    mockFindUploadBySlug.mockReturnValue({ id: 'upload-id-a', slug: 'slug-a' })
+    mockGetAllUploadIds.mockReturnValue(['upload-id-a'])
+    const task = await loadTask()
+
+    task.run()
+
+    expect(mockDeleteSiteData).toHaveBeenCalledWith('upload-id-a')
+    expect(mockReconcileSiteData).toHaveBeenCalledWith(['upload-id-a'])
   })
 
   it('deletes storage before the db record', async () => {

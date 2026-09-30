@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import { getCookie, setCookie, deleteCookie } from 'h3'
 import type { H3Event } from 'h3'
+import { isProductionRuntime } from '~/server/utils/runtime-mode'
 
 const COOKIE_NAME = 'jolt_user'
 const SESSION_MAX_AGE_SEC = 30 * 24 * 60 * 60 // 30 days
@@ -22,7 +23,7 @@ export function setUserCookie(event: H3Event, userId: string): void {
     path: '/',
     maxAge: SESSION_MAX_AGE_SEC,
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProductionRuntime(),
     sameSite: 'lax',
   })
 }

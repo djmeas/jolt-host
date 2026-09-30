@@ -6,15 +6,32 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Persist SQLite DB and uploaded files on your VPS
+      # Persist SQLite DB, uploaded files, and per-site data on your VPS
       - jolthost-data:/app/data
       - jolthost-storage:/app/storage
     environment:
       - NODE_ENV=production
+      # Local defaults so `docker compose up` serves the app on http://localhost:3000
+      # and uploaded sites on http://<slug>.sites.localhost:3000. Loopback origins are
+      # exempt from the production HTTPS requirement. For a real deployment set both
+      # in .env to HTTPS origins that match the host (and port) you browse, and give
+      # the hosted base wildcard DNS/TLS in front of the proxy.
+      - JOLT_APP_ORIGIN=${JOLT_APP_ORIGIN:-http://localhost:3000}
+      - JOLT_SITE_BASE_ORIGIN=${JOLT_SITE_BASE_ORIGIN:-http://sites.localhost:3000}
       # Optional: max upload size in bytes (default 25MB). Example: 52428800 for 50MB
       # - NUXT_JOLTHOST_UPLOAD_MAX_BYTES=26214400
     restart: unless-stopped
 
+# Serving uploaded sites needs an isolated origin in front of this container:
+#   JOLT_APP_ORIGIN=https://host.example.com
+#   JOLT_SITE_BASE_ORIGIN=https://sites.example.net
+# Point wildcard DNS (*.sites.example.net) at the proxy and terminate a wildcard
+# TLS certificate there. The proxy must forward the original Host and Origin
+# headers unchanged to this service; with a proxy set JOLT_TRUST_PROXY=true so
+# the app trusts X-Forwarded-Host / X-Forwarded-For.
+#
+# Keep /app/data (which holds data/sites/*.sqlite) out of any served directory,
+# and back it up with SQLite's consistent backup, not a raw file copy.
 volumes:
   jolthost-data:
   jolthost-storage:

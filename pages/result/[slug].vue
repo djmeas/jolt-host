@@ -9,13 +9,14 @@ type StoredResult = { url_with_unlock?: string; url?: string; owner_token?: stri
 
 const storedResult = ref<StoredResult | null>(null)
 const { addSite } = useMySites()
+const { siteUrlFor } = useSiteUrl()
 
 onMounted(() => {
   try {
     const raw = sessionStorage.getItem(`${RESULT_BY_SLUG_PREFIX}${slug.value}`)
     if (raw) {
       storedResult.value = JSON.parse(raw) as StoredResult
-      const baseUrl = storedResult.value.url_with_unlock || storedResult.value.url || `${window.location.origin}/view/${slug.value}`
+      const baseUrl = storedResult.value.url_with_unlock || storedResult.value.url || siteUrlFor(slug.value)
       addSite({
         siteUrl: baseUrl,
         title: storedResult.value.title,
@@ -29,20 +30,16 @@ onMounted(() => {
 const url = computed(() => {
   const s = slug.value
   if (!s) return ''
-  if (import.meta.client) {
-    const base = storedResult.value?.url_with_unlock || storedResult.value?.url || `${window.location.origin}/view/${s}`
-    const title = storedResult.value?.title
-    if (title) {
-      try {
-        const u = new URL(base)
-        u.searchParams.set('title', title)
-        return u.toString()
-      } catch {}
-    }
-    return base
+  const base = storedResult.value?.url_with_unlock || storedResult.value?.url || siteUrlFor(s)
+  const title = storedResult.value?.title
+  if (title) {
+    try {
+      const u = new URL(base)
+      u.searchParams.set('title', title)
+      return u.toString()
+    } catch {}
   }
-  const req = useRequestURL()
-  return `${req.origin}/view/${s}`
+  return base
 })
 
 const deleteUrl = computed(() => {

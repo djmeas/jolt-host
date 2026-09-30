@@ -1,6 +1,7 @@
 import { getRouterParam, readBody } from 'h3'
 import { findUploadBySlug, deleteUploadBySlugAndOwnerToken } from '~/server/utils/db'
 import { deleteStorageForSlug } from '~/server/utils/storage'
+import { deleteSiteData } from '~/server/utils/site-data'
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, 'slug')
@@ -25,6 +26,7 @@ export default defineEventHandler(async (event) => {
   }
 
   deleteStorageForSlug(slug)
+  deleteSiteData(row.id)
 
   return { ok: true }
 })

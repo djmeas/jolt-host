@@ -1,12 +1,15 @@
 import { setWebSessionCookie } from '~/server/utils/web-session'
 import { registeredUsersOnly } from '~/server/utils/upload-mode'
+import { isSiteHostRequest } from '~/server/utils/site-host'
 
 /**
  * Sets a web session cookie when users visit the upload page or result page.
  * This cookie allows anonymous uploads via the web form; API uploads require an API token.
+ * Hosted site origins never mint application sessions.
  */
 export default defineEventHandler((event) => {
   if (registeredUsersOnly()) return
+  if (isSiteHostRequest(event)) return
   const path = getRequestURL(event).pathname
   if (event.method !== 'GET') return
   if (path === '/' || path === '/paste' || path.startsWith('/result')) {

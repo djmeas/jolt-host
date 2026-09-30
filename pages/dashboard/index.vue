@@ -8,7 +8,9 @@ type UploadRow = {
   expires_at: string | null
   password_hash?: string | null
   has_password?: boolean
+  data_enabled?: boolean | number
   title?: string | null
+  url?: string
 }
 
 type UploadsResponse = {
@@ -22,6 +24,9 @@ type UploadsResponse = {
 const { user, isLoggedIn, refresh: refreshUser } = useCurrentUser()
 const { data: adminSession } = await useFetch('/api/admin/session', { key: 'admin-session' })
 const isAdmin = computed(() => adminSession.value?.authenticated ?? false)
+const { data: siteConfig } = await useFetch('/api/config')
+const dataFeatureAvailable = computed(() => siteConfig.value?.dataFeatureAvailable === true)
+const { siteUrlFor } = useSiteUrl()
 
 if (!isAdmin.value && !isLoggedIn.value) await refreshUser()
 if (!isAdmin.value && !isLoggedIn.value) await navigateTo('/login')
@@ -73,15 +78,12 @@ const formatDate = (iso: string) => {
   }
 }
 
-function buildUrl(slug: string) {
-  if (import.meta.client) {
-    return `${window.location.origin}/view/${slug}`
-  }
-  return `/view/${slug}`
+function buildUrl(upload: UploadRow) {
+  return upload.url || siteUrlFor(upload.slug)
 }
 
-function viewPath(slug: string): string {
-  return `/view/${slug}`
+function displayUrl(upload: UploadRow): string {
+  return buildUrl(upload).replace(/^https?:\/\//, '')
 }
 
 const openMenuSlug = ref<string | null>(null)
@@ -230,6 +232,41 @@ async function saveExpiry(upload: UploadRow) {
   }
 }
 
+// --- Site data API ---
+const dataSavingSlug = ref<string | null>(null)
+const dataError = ref<string | null>(null)
+
+function isDataEnabled(upload: UploadRow): boolean {
+  return upload.data_enabled === true || upload.data_enabled === 1
+}
+
+async function toggleData(upload: UploadRow) {
+  dataSavingSlug.value = upload.slug
+  dataError.value = null
+  try {
+    await $fetch(`/api/uploads/${upload.slug}/data`, {
+      method: 'PUT',
+      body: { enabled: !isDataEnabled(upload) },
+    })
+    await fetchUploads()
+  } catch (e: unknown) {
+    const err = e as { data?: { message?: string }; message?: string }
+    dataError.value = err.data?.message ?? err.message ?? 'Failed to update site data'
+  } finally {
+    dataSavingSlug.value = null
+  }
+}
+
+async function copyDataLoginUrl(upload: UploadRow) {
+  const url = `${buildUrl(upload).replace(/\/$/, '')}/_jolt/data/login`
+  try {
+    await navigator.clipboard.writeText(url)
+    dataError.value = null
+  } catch {
+    dataError.value = url
+  }
+}
+
 // --- Account settings ---
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -372,6 +409,7 @@ onMounted(() => {
       <!-- My Uploads -->
       <section v-if="activeTab === 'uploads'" class="section">
         <p v-if="uploadsError" class="section-error">{{ uploadsError }}</p>
+        <p v-if="dataError" class="section-error">{{ dataError }}</p>
 
         <div v-if="uploadsLoading && !uploadsData" class="empty muted">Loading…</div>
 
@@ -399,6 +437,7 @@ onMounted(() => {
                   <th class="col-date">Created</th>
                   <th class="col-expires">Expires</th>
                   <th class="col-protected">Password</th>
+                  <th class="col-protected">Data API</th>
                   <th class="col-actions">Actions</th>
                 </tr>
               </thead>
@@ -406,7 +445,7 @@ onMounted(() => {
                 <tr v-for="(u, idx) in uploads" :key="u.slug" :class="{ 'row-alt': idx % 2 === 1 }">
                   <td class="col-url">
                     <p v-if="u.title" class="site-title">{{ u.title }}</p>
-                    <a :href="buildUrl(u.slug)" target="_blank" rel="noopener" class="url-link" :title="buildUrl(u.slug)">{{ viewPath(u.slug) }}</a>
+                    <a :href="buildUrl(u)" target="_blank" rel="noopener" class="url-link" :title="buildUrl(u)">{{ displayUrl(u) }}</a>
                   </td>
                   <td class="col-date muted">{{ formatDate(u.created_at) }}</td>
                   <td class="col-expires muted">
@@ -420,6 +459,12 @@ onMounted(() => {
                     <span :class="['badge', isProtected(u) ? 'badge-yes' : 'badge-no']">
                       {{ isProtected(u) ? 'Yes' : 'No' }}
                     </span>
+                  </td>
+                  <td class="col-protected">
+                    <span :class="['badge', isDataEnabled(u) ? 'badge-yes' : 'badge-no']">
+                      {{ isDataEnabled(u) ? 'On' : 'Off' }}
+                    </span>
+                    <span v-if="!isDataEnabled(u) && !isProtected(u)" class="data-hint">needs password</span>
                   </td>
                   <td class="col-actions">
                     <!-- Password editing -->
@@ -471,6 +516,23 @@ onMounted(() => {
                             <button type="button" class="menu-item" @click="startEditPassword(u.slug); closeMenu()">Change password</button>
                             <button type="button" class="menu-item" @click="startEditExpiry(u.slug, u); closeMenu()">Change expiry</button>
                             <button type="button" class="menu-item" @click="goToUpdate(u.slug)">Replace files</button>
+                            <button
+                              type="button"
+                              class="menu-item"
+                              :disabled="!dataFeatureAvailable || !isProtected(u) || dataSavingSlug === u.slug"
+                              :title="isProtected(u) ? '' : 'A password is required for site data'"
+                              @click="toggleData(u); closeMenu()"
+                            >
+                              {{ isDataEnabled(u) ? 'Disable data API' : 'Enable data API' }}
+                            </button>
+                            <button
+                              v-if="isDataEnabled(u)"
+                              type="button"
+                              class="menu-item"
+                              @click="copyDataLoginUrl(u); closeMenu()"
+                            >
+                              Copy data login URL
+                            </button>
                           </div>
                         </Teleport>
                       </div>
@@ -523,6 +585,12 @@ onMounted(() => {
               </button>
             </div>
           </div>
+
+          <p class="data-note">
+            Site data is shared: everyone who has the site password can read and edit it, and unlock
+            links can only read. Disabling keeps the records; setting a new password reveals the same
+            records to whoever holds the new password. Deleting the site deletes them.
+          </p>
         </div>
       </section>
 
@@ -803,6 +871,18 @@ onMounted(() => {
 .col-date { min-width: 140px; white-space: nowrap; text-align: left; }
 .col-expires { min-width: 140px; white-space: nowrap; text-align: left; }
 .col-protected { min-width: 80px; text-align: left; }
+.data-hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  color: #52525b;
+}
+.data-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.8rem;
+  color: #71717a;
+  line-height: 1.5;
+}
 .uploads-table .col-actions { min-width: 240px; text-align: center; }
 .site-title {
   margin: 0 0 0.2rem;

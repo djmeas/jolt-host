@@ -19,6 +19,10 @@ export default defineNuxtConfig({
       jolthost: {
         /** Max upload size in bytes (exposed to client for validation). Use NUXT_PUBLIC_JOLTHOST_UPLOAD_MAX_BYTES to override. */
         uploadMaxBytes: DEFAULT_UPLOAD_MAX_BYTES,
+        /** Hosted-origin base for site links, e.g. http://sites.localhost:3000. Use NUXT_PUBLIC_JOLTHOST_SITE_BASE_ORIGIN to override. */
+        siteBaseOrigin: process.env.JOLT_SITE_BASE_ORIGIN ?? '',
+        /** Application origin, e.g. https://host.example.com. Use NUXT_PUBLIC_JOLTHOST_APP_ORIGIN to override. */
+        appOrigin: process.env.JOLT_APP_ORIGIN ?? '',
       },
       /** Cloudflare Turnstile site key (public). Set NUXT_PUBLIC_TURNSTILE_SITE_KEY in production. */
       turnstileSiteKey: '',

@@ -41,11 +41,8 @@ onMounted(() => {
   } catch (_) {}
 })
 
-const siteUrl = computed(() => {
-  if (import.meta.client) return `${window.location.origin}/view/${slug.value}`
-  const req = useRequestURL()
-  return `${req.origin}/view/${slug.value}`
-})
+const { siteUrlFor } = useSiteUrl()
+const siteUrl = computed(() => siteUrlFor(slug.value))
 
 function setFile(file: File | null) {
   error.value = null

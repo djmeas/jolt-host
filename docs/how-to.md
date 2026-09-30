@@ -104,10 +104,46 @@ You can delete all My Sites history at any time by clicking the **Clear My Sites
 
 ## Sharing and access
 
-- Your link is public — anyone who has it can view your site
-- If you want to limit access, use the password option
-- There is no "private" mode beyond password protection
-- Links look like: `https://yourdomain.com/view/abc123`
+The normal site link is a public address, not an invitation or an account permission. Without a
+password, anyone who opens it can view the page and its assets without signing in. The random slug
+makes a link harder to guess, but anyone you send it to can forward it. There is no invite-only or
+per-visitor private mode; use a site password if you need to limit viewing.
+
+### Passwords and unlock links
+
+With a password, visitors enter it on a Jolt-owned form before the site is shown. Share the normal
+site URL and the password separately. A browser that has already unlocked the site can keep viewing
+it for up to 30 days: changing the password blocks new attempts with the old password, but **does
+not revoke existing view access**. Deleting the site or letting it expire ends access to it.
+
+If your result includes a `?unlock=...` URL, treat it like a key: anyone holding that link can bypass
+the password prompt and view the site until the link expires. It can be forwarded just like the
+normal link; changing the password does not invalidate it. An unlock link **does not** allow edits
+to site data or changes to the upload. Keep the **Delete this site** link and `owner_token` private:
+they authorize site management, not just viewing.
+
+### Why the site has its own host
+
+A link looks like `https://quick-dragon-7f3a9c.sites.example.net/`. The slug identifies the site;
+`sites.example.net` represents the hosted-site domain configured by the operator, separate from
+the Jolt Host app domain. Uploaded HTML and JavaScript run on that site's host, not alongside your
+app login or dashboard. This isolates app credentials; it does **not** make an unprotected site
+private or stop someone with access from sharing its content.
+
+Older app-domain `/view/<slug>` links redirect to the same hosted site, including asset paths.
+Only a view-only `?unlock=` token survives the redirect. Passwords, owner tokens, and other query
+parameters are dropped; use the password form rather than putting a password in a URL.
+
+### If site data is enabled
+
+The owner can opt a **password-protected** site into shared data. Visitors with view access,
+including an unlock link, can read its records. Only someone who enters the site password on
+Jolt's form can add, change, or delete records. Every password holder edits the **same** records;
+there are no private records or separate permissions for individual visitors. A script running in
+the site can also make data requests as a signed-in password holder, so publish only scripts you
+trust. Disabling data or clearing the password blocks data access but preserves records for later
+re-enabling; deleting or expiring the site removes them. API paths, limits, and a working to-do
+example are in `docs/jolt-data-api.md` in the repository.
 
 ---
 
@@ -149,13 +185,14 @@ The response includes the shareable URL and the **owner token**:
 ```json
 {
   "slug": "quick-dragon-7f3a9c",
-  "url": "https://yourdomain.com/view/quick-dragon-7f3a9c",
+  "url": "https://quick-dragon-7f3a9c.sites.example.net/",
   "entry_point": "quick-dragon-7f3a9c/index.html",
   "owner_token": "abc123...",
-  "url_with_owner_token": "https://yourdomain.com/view/quick-dragon-7f3a9c?owner_token=abc123...",
-  "url_with_unlock": "https://yourdomain.com/view/quick-dragon-7f3a9c?unlock=TOKEN"
+  "url_with_unlock": "https://quick-dragon-7f3a9c.sites.example.net/?unlock=TOKEN"
 }
 ```
+
+`url` is the canonical public URL on the hosted-site origin; `url_with_unlock` is only present when you set a password. The owner token is returned only in this one-time JSON response — it is never part of a URL.
 
 Slugs are generated as `adjective-noun-hash` (for example `mystic-ninja-b589aa`). The trailing hash is random, so use the exact `slug` from the response rather than constructing one yourself.
 
@@ -185,7 +222,7 @@ To publish a new version **at the same URL**, send the full new file set (as a Z
 Provide the site's `owner_token` as a form field (never in the URL). With a valid API token, the `owner_token` is what proves you own the site — so an API token plus the owner token is enough to replace a site, even in **registered-users-only** mode, without logging in. If you are logged in as the owner, or are an admin, you do not need the owner token.
 
 ```bash
-# Replace all files for the site at /view/quick-dragon-7f3a9c
+# Replace all files for the site quick-dragon-7f3a9c
 curl -X PUT https://yourdomain.com/api/uploads/quick-dragon-7f3a9c/content \
   -H "Authorization: Bearer jolt_YOUR_TOKEN" \
   -F "file=@./site-v2.zip" \
@@ -210,7 +247,7 @@ On success you get back the unchanged `slug` and `url` plus the new `entry_point
 ```json
 {
   "slug": "quick-dragon-7f3a9c",
-  "url": "https://yourdomain.com/view/quick-dragon-7f3a9c",
+  "url": "https://quick-dragon-7f3a9c.sites.example.net/",
   "entry_point": ".content/quick-dragon-7f3a9c/8f2c.../index.html"
 }
 ```
