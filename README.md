@@ -144,6 +144,10 @@ Build and run with Docker (data and uploads persist in named volumes):
 docker compose up -d --build
 ```
 
+When changing dependencies, regenerate and commit `package-lock.json` with the same npm major as
+the `node:20-bookworm` builder (currently npm 10). Docker uses `npm ci`, which rejects lockfiles
+missing resolved optional peer dependencies.
+
 App is at [http://localhost:3000](http://localhost:3000). On a VPS, put a reverse proxy (e.g. Caddy or Nginx) in front and optionally set `NITRO_PORT=80` or map `80:3000`.
 
 To serve uploaded sites (and to enable site data), set `JOLT_APP_ORIGIN` and
