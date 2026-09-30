@@ -104,15 +104,46 @@ You can delete all My Sites history at any time by clicking the **Clear My Sites
 
 ## Sharing and access
 
-- Your link is public — anyone who has it can view your site
-- If you want to limit access, use the password option
-- There is no "private" mode beyond password protection
-- Links look like: `https://quick-dragon-7f3a9c.sites.example.net/` — each site is served from its own
-  host on the hosted-site domain, separate from the app. Older `/view/<slug>` links on the app domain
-  still work: they redirect to the same hosted URL. Only the `?unlock=` token is carried across a
-  redirect; owner tokens and passwords are stripped.
-- A site with the optional data API enabled can also read and edit that site's shared records. See
-  [jolt-data-api.md](jolt-data-api.md).
+The normal site link is a public address, not an invitation or an account permission. Without a
+password, anyone who opens it can view the page and its assets without signing in. The random slug
+makes a link harder to guess, but anyone you send it to can forward it. There is no invite-only or
+per-visitor private mode; use a site password if you need to limit viewing.
+
+### Passwords and unlock links
+
+With a password, visitors enter it on a Jolt-owned form before the site is shown. Share the normal
+site URL and the password separately. A browser that has already unlocked the site can keep viewing
+it for up to 30 days: changing the password blocks new attempts with the old password, but **does
+not revoke existing view access**. Deleting the site or letting it expire ends access to it.
+
+If your result includes a `?unlock=...` URL, treat it like a key: anyone holding that link can bypass
+the password prompt and view the site until the link expires. It can be forwarded just like the
+normal link; changing the password does not invalidate it. An unlock link **does not** allow edits
+to site data or changes to the upload. Keep the **Delete this site** link and `owner_token` private:
+they authorize site management, not just viewing.
+
+### Why the site has its own host
+
+A link looks like `https://quick-dragon-7f3a9c.sites.example.net/`. The slug identifies the site;
+`sites.example.net` represents the hosted-site domain configured by the operator, separate from
+the Jolt Host app domain. Uploaded HTML and JavaScript run on that site's host, not alongside your
+app login or dashboard. This isolates app credentials; it does **not** make an unprotected site
+private or stop someone with access from sharing its content.
+
+Older app-domain `/view/<slug>` links redirect to the same hosted site, including asset paths.
+Only a view-only `?unlock=` token survives the redirect. Passwords, owner tokens, and other query
+parameters are dropped; use the password form rather than putting a password in a URL.
+
+### If site data is enabled
+
+The owner can opt a **password-protected** site into shared data. Visitors with view access,
+including an unlock link, can read its records. Only someone who enters the site password on
+Jolt's form can add, change, or delete records. Every password holder edits the **same** records;
+there are no private records or separate permissions for individual visitors. A script running in
+the site can also make data requests as a signed-in password holder, so publish only scripts you
+trust. Disabling data or clearing the password blocks data access but preserves records for later
+re-enabling; deleting or expiring the site removes them. API paths, limits, and a working to-do
+example are in `docs/jolt-data-api.md` in the repository.
 
 ---
 
