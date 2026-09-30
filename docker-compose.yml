@@ -11,6 +11,13 @@ services:
       - jolthost-storage:/app/storage
     environment:
       - NODE_ENV=production
+      # Local defaults so `docker compose up` serves the app on http://localhost:3000
+      # and uploaded sites on http://<slug>.sites.localhost:3000. Loopback origins are
+      # exempt from the production HTTPS requirement. For a real deployment set both
+      # in .env to HTTPS origins that match the host (and port) you browse, and give
+      # the hosted base wildcard DNS/TLS in front of the proxy.
+      - JOLT_APP_ORIGIN=${JOLT_APP_ORIGIN:-http://localhost:3000}
+      - JOLT_SITE_BASE_ORIGIN=${JOLT_SITE_BASE_ORIGIN:-http://sites.localhost:3000}
       # Optional: max upload size in bytes (default 25MB). Example: 52428800 for 50MB
       # - NUXT_JOLTHOST_UPLOAD_MAX_BYTES=26214400
     restart: unless-stopped

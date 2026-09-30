@@ -69,6 +69,20 @@ function parseOrigin(raw: string | undefined): OriginParts | null {
   }
 }
 
+/**
+ * Loopback hosts cannot be reached from another machine and cannot be delegated
+ * by DNS, so they carry no origin-isolation risk: no uploaded site can ever
+ * share an origin with them from a remote browser.
+ */
+function isLoopbackHostname(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1'
+  )
+}
+
 function sameRegistrableDomain(a: string, b: string): boolean {
   const da = getDomain(a, { allowIcannDomains: true, allowPrivateDomains: true })
   const db = getDomain(b, { allowIcannDomains: true, allowPrivateDomains: true })
@@ -103,8 +117,13 @@ export function getSiteHostConfig(): SiteHostConfig {
   }
 
   if (prod) {
-    if (app.scheme !== 'https' || site.scheme !== 'https') {
-      return fail('HTTPS is required for JOLT_APP_ORIGIN and JOLT_SITE_BASE_ORIGIN in production')
+    // Loopback pairs are the development-shaped local deployment (`docker compose
+    // up`, `npm run preview`) and are exempt from the public-origin rules.
+    const loopback = isLoopbackHostname(app.hostname) && isLoopbackHostname(site.hostname)
+    if (!loopback && (app.scheme !== 'https' || site.scheme !== 'https')) {
+      return fail(
+        'HTTPS is required for JOLT_APP_ORIGIN and JOLT_SITE_BASE_ORIGIN in production (loopback hosts may use http)'
+      )
     }
     if (sameRegistrableDomain(app.hostname, site.hostname)) {
       return fail(
@@ -235,6 +254,20 @@ export function isAppOriginHost(hostHeader: string | undefined): boolean {
     parsed.hostname === cfg.app.hostname &&
     normalizePort(parsed.port, cfg.app.scheme) === normalizePort(cfg.app.port, cfg.app.scheme)
   )
+}
+
+/**
+ * True for a loopback Host header, with or without an explicit port
+ * (`localhost:3000`, `127.0.0.1`, `[::1]:8080`, `sites.localhost`).
+ *
+ * The production gate uses this so a loopback request can always reach the
+ * application: loopback is unreachable from any other machine, and without it a
+ * deployment with no configured origins (local `docker compose up` before the
+ * origins are set, `npm run preview`) would 404 every page.
+ */
+export function isLoopbackHost(hostHeader: string | undefined): boolean {
+  const parsed = splitHostPort(hostHeader)
+  return parsed ? isLoopbackHostname(parsed.hostname) : false
 }
 
 /**

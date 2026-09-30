@@ -123,8 +123,8 @@ See [.env.example](.env.example). Main options:
 | Variable | Purpose |
 |----------|---------|
 | `JOLT_ADMIN_PASSWORD` or `NUXT_JOLTHOST_ADMIN_PASSWORD` | Admin dashboard password (required for `/admin`). |
-| `JOLT_APP_ORIGIN` | Full app origin, e.g. `https://host.example.com`. Required in production. |
-| `JOLT_SITE_BASE_ORIGIN` | Full hosted-site base origin, e.g. `https://sites.example.net`. Required in production; needs wildcard DNS/TLS to the same service. |
+| `JOLT_APP_ORIGIN` | Full app origin, e.g. `https://host.example.com`. Required in production unless it is a loopback host such as `http://localhost:3000`. |
+| `JOLT_SITE_BASE_ORIGIN` | Full hosted-site base origin, e.g. `https://sites.example.net`. Required in production unless it is a loopback host such as `http://sites.localhost:3000`; needs wildcard DNS/TLS to the same service. |
 | `JOLT_TRUST_PROXY` | Set to `true` behind a reverse proxy so `X-Forwarded-Host`/`X-Forwarded-For`/`CF-Connecting-IP` are trusted. |
 | `JOLT_DATA_SESSION_SECRET` | Secret for signing site data-admin cookies (required for the site data feature). |
 | `JOLT_VIEW_SECRET` | Secret for signing view/unlock cookies and tokens. |
@@ -148,12 +148,19 @@ When changing dependencies, regenerate and commit `package-lock.json` with the s
 the `node:20-bookworm` builder (currently npm 10). Docker uses `npm ci`, which rejects lockfiles
 missing resolved optional peer dependencies.
 
-App is at [http://localhost:3000](http://localhost:3000). On a VPS, put a reverse proxy (e.g. Caddy or Nginx) in front and optionally set `NITRO_PORT=80` or map `80:3000`.
+App is at [http://localhost:3000](http://localhost:3000), and uploaded sites are served locally at
+`http://<slug>.sites.localhost:3000` (`*.localhost` resolves to loopback in browsers). Compose
+defaults `JOLT_APP_ORIGIN` and `JOLT_SITE_BASE_ORIGIN` to those loopback origins, and loopback
+origins are allowed to use `http` even though the container runs in production mode. Publishing on a
+different port? Point both origins (and the port mapping) at the port you browse.
 
-To serve uploaded sites (and to enable site data), set `JOLT_APP_ORIGIN` and
-`JOLT_SITE_BASE_ORIGIN`, point wildcard DNS (`*.sites.example.net`) at the proxy, and terminate a
-wildcard TLS certificate there. The proxy must pass the original `Host` and `Origin` headers
-through unchanged — see [docs/jolt-data-api.md](docs/jolt-data-api.md#before-you-can-enable-it-operator).
+On a VPS, put a reverse proxy (e.g. Caddy or Nginx) in front, set `JOLT_APP_ORIGIN` and
+`JOLT_SITE_BASE_ORIGIN` to your HTTPS origins on **different registrable domains**, point wildcard
+DNS (`*.sites.example.net`) at the proxy, and terminate a wildcard TLS certificate there. With no
+origins configured, the app answers only on loopback hosts and 404s every other host, so a
+misconfigured deployment never serves the dashboard on the hosted domain. The proxy must pass the
+original `Host` and `Origin` headers through unchanged — see
+[docs/jolt-data-api.md](docs/jolt-data-api.md#before-you-can-enable-it-operator).
 
 ## Scripts
 

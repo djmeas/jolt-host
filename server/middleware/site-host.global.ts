@@ -5,6 +5,7 @@ import {
   isAppOriginHost,
   isBlockedAppPath,
   isJoltHostedPath,
+  isLoopbackHost,
   isSiteBaseHost,
   matchSiteHost,
   serveSiteContent,
@@ -32,8 +33,11 @@ export default defineEventHandler(async (event) => {
     if (isSiteBaseHost(host)) {
       throw createError({ statusCode: 404, message: 'Not found' })
     }
-    // In production only the configured app origin serves the application.
-    if (isProductionRuntime() && !isAppOriginHost(host)) {
+    // In production only the configured app origin serves the application — plus
+    // loopback hosts, which no other machine can reach. Without the loopback
+    // exemption a deployment with no origins configured yet (local
+    // `docker compose up`, `npm run preview`) would 404 every page with no hint why.
+    if (isProductionRuntime() && !isAppOriginHost(host) && !isLoopbackHost(host)) {
       throw createError({ statusCode: 404, message: 'Not found' })
     }
     if (pathname === '/_jolt' || pathname.startsWith('/_jolt/')) {

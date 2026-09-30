@@ -24,13 +24,15 @@ Requirements and constraints:
 
 - The hosted base must be a **different registrable domain** from the app origin (checked with a
   public-suffix list, not a string suffix). `host.example.com` + `sites.example.com` is rejected.
-  Development `localhost` / `sites.localhost` is allowed outside production.
+  `localhost` / `sites.localhost` (loopback) is always accepted and is what local Docker and
+  `npm run preview` use.
 - **Wildcard DNS** `*.sites.example.net` → the same Node service (or its reverse proxy), and a
   **wildcard TLS certificate** (`*.sites.example.net` or `*.example.net`) so every site host is
   served over HTTPS. A proxy must pass the original `Host` header through unchanged, and must not
   strip or rewrite the `Origin` header. `JOLT_TRUST_PROXY=true` additionally trusts
   `X-Forwarded-Host`/`X-Forwarded-For`/`CF-Connecting-IP` for host and client-IP detection.
-- Production must use HTTPS. Without valid origins and secrets the data feature fails closed
+- Production must use HTTPS for public origins (loopback origins may use `http`, so the local
+  container works). Without valid origins and secrets the data feature fails closed
   (enabling returns `503`) and legacy `/view/<slug>` links return `503`; nothing is exposed on a
   shared origin.
 - Multiple app replicas cannot share SQLite data files. Run one instance, or accept that data is

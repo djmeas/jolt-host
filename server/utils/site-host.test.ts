@@ -4,6 +4,7 @@ import {
   getSiteHostConfig,
   isBlockedAppPath,
   isJoltHostedPath,
+  isLoopbackHost,
   legacyViewTarget,
   matchSiteHost,
   siteOriginForSlug,
@@ -77,6 +78,36 @@ describe('canonical URLs', () => {
   })
 })
 
+describe('loopback hosts', () => {
+  it('accepts loopback hosts with or without a port', () => {
+    for (const host of [
+      'localhost',
+      'localhost:3000',
+      '127.0.0.1',
+      '127.0.0.1:8080',
+      '[::1]:3000',
+      'sites.localhost:3000',
+      'quick-dragon-42.sites.localhost:3000',
+    ]) {
+      expect(isLoopbackHost(host), host).toBe(true)
+    }
+  })
+
+  it('rejects non-loopback hosts and empty values', () => {
+    for (const host of [
+      'example.com',
+      'localhost.example.com',
+      'notlocalhost',
+      '127.0.0.2',
+      'sites.example.net:3000',
+      '',
+      undefined,
+    ]) {
+      expect(isLoopbackHost(host), String(host)).toBe(false)
+    }
+  })
+})
+
 describe('deployment configuration', () => {
   it('accepts separate registrable domains over HTTPS in production', () => {
     vi.stubEnv('NODE_ENV', 'production')
@@ -102,6 +133,29 @@ describe('deployment configuration', () => {
     vi.stubEnv('JOLT_SITE_BASE_ORIGIN', '')
     expect(getSiteHostConfig().configured).toBe(false)
     expect(siteOriginForSlug('anything')).toBeNull()
+  })
+
+  it('accepts a loopback origin pair over http in production', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('JOLT_APP_ORIGIN', 'http://localhost:3000')
+    vi.stubEnv('JOLT_SITE_BASE_ORIGIN', 'http://sites.localhost:3000')
+    const config = getSiteHostConfig()
+    expect(config.configured).toBe(true)
+    expect(siteOriginForSlug('quick-dragon-42')).toBe('http://quick-dragon-42.sites.localhost:3000')
+    expect(matchSiteHost('quick-dragon-42.sites.localhost:3000')).toEqual({
+      slug: 'quick-dragon-42',
+    })
+  })
+
+  it('requires both origins of a production pair to be loopback for http', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('JOLT_APP_ORIGIN', 'http://localhost:3000')
+    vi.stubEnv('JOLT_SITE_BASE_ORIGIN', 'https://sites.example.net')
+    expect(getSiteHostConfig().configured).toBe(false)
+
+    vi.stubEnv('JOLT_APP_ORIGIN', 'https://host.example.com')
+    vi.stubEnv('JOLT_SITE_BASE_ORIGIN', 'http://sites.localhost:3000')
+    expect(getSiteHostConfig().configured).toBe(false)
   })
 
   it('falls back to loopback defaults outside production', () => {
