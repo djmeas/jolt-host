@@ -43,6 +43,9 @@ test/.integration-env.json
 # Uploaded / generated content (remove this line if you want to track storage)
 storage/
 
+# Local scratch (guide drafts, runbooks, throwaway scripts) — not part of the app
+tmp/
+
 # Runtime database (contains user data — never commit)
 data/jolt.db
 data/jolt.db-shm

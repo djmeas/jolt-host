@@ -173,7 +173,7 @@ Where to create one:
 Send a `multipart/form-data` request to `POST /api/upload` with a `file` field. Add `password`, `expiration` (`1h`, `8h`, `24h`, `1w`, or `1d`), and `title` as optional fields.
 
 ```bash
-curl -X POST https://yourdomain.com/api/upload \
+curl -X POST https://host.example.com/api/upload \
   -H "Authorization: Bearer jolt_YOUR_TOKEN" \
   -F "file=@./index.html" \
   -F "expiration=24h" \
@@ -205,7 +205,7 @@ const form = new FormData()
 form.append('file', fileInput.files[0])
 form.append('expiration', '24h')
 
-const res = await fetch('https://yourdomain.com/api/upload', {
+const res = await fetch('https://host.example.com/api/upload', {
   method: 'POST',
   headers: { Authorization: 'Bearer jolt_YOUR_TOKEN' },
   body: form,
@@ -223,7 +223,7 @@ Provide the site's `owner_token` as a form field (never in the URL). With a vali
 
 ```bash
 # Replace all files for the site quick-dragon-7f3a9c
-curl -X PUT https://yourdomain.com/api/uploads/quick-dragon-7f3a9c/content \
+curl -X PUT https://host.example.com/api/uploads/quick-dragon-7f3a9c/content \
   -H "Authorization: Bearer jolt_YOUR_TOKEN" \
   -F "file=@./site-v2.zip" \
   -F "owner_token=abc123..."
@@ -234,7 +234,7 @@ const form = new FormData()
 form.append('file', fileInput.files[0])
 form.append('owner_token', 'abc123...') // omit when logged in as the owner
 
-const res = await fetch('https://yourdomain.com/api/uploads/quick-dragon-7f3a9c/content', {
+const res = await fetch('https://host.example.com/api/uploads/quick-dragon-7f3a9c/content', {
   method: 'PUT',
   headers: { Authorization: 'Bearer jolt_YOUR_TOKEN' },
   body: form,

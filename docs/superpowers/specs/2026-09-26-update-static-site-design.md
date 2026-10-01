@@ -40,7 +40,7 @@ The owner token is accepted **only** as a form field, never in the URL or query 
 ```json
 {
   "slug": "quick-dragon-42",
-  "url": "https://your-host.com/view/quick-dragon-42",
+  "url": "https://host.example.com/view/quick-dragon-42",
   "entry_point": ".content/quick-dragon-42/8f2c.../index.html"
 }
 ```
