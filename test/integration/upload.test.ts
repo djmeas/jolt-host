@@ -3,6 +3,8 @@ import { readFileSync, existsSync, rmSync } from 'fs'
 import { join } from 'path'
 import http from 'node:http'
 import { createWebSession } from '~/server/utils/web-session'
+import { MAX_COLLECTIONS, MAX_RECORD_BYTES } from '~/server/utils/site-data'
+import { DATA_BODY_MAX_BYTES } from '~/server/utils/data-api'
 import { randomUUID } from 'crypto'
 
 const FIXTURES = join(process.cwd(), 'test', 'fixtures')
@@ -1000,6 +1002,85 @@ describe('hosted site data API integration', () => {
     expect(payload.message).toMatch(/password/i)
   })
 
+  it('honours enable_data=true at upload time without the dashboard', async () => {
+    const created = await createSite({ password: sitePassword, enable_data: 'true' }, { Cookie: userCookie })
+    expect(created.data_enabled).toBe('true')
+
+    // The data API answers with the 401 sign-in shape (enabled), not the 404 of a
+    // data-disabled site.
+    const items = await siteRequest(created.slug!, '/_jolt/data/v1/collections/todos/items')
+    expect(items.status).toBe(401)
+    const payload = await items.json()
+    expect(payload.login_url).toBe('/_jolt/data/login')
+  })
+
+  it('refuses enable_data=true when the upload has no password', async () => {
+    const res = await fetch(`${getBaseUrl()}/api/upload`, {
+      method: 'POST',
+      body: uploadForm('dummy.html', { enable_data: 'true' }),
+      headers: nextHeaders({ Cookie: userCookie }),
+    })
+    expect(res.status).toBe(400)
+    const payload = await res.json()
+    expect(payload.message).toMatch(/password/i)
+  })
+
+  it('ignores a non-truthy enable_data value', async () => {
+    const created = await createSite({ password: sitePassword, enable_data: 'false' }, { Cookie: userCookie })
+    expect(created.data_enabled).toBeUndefined()
+
+    const items = await siteRequest(created.slug!, '/_jolt/data/v1/collections/todos/items')
+    expect(items.status).toBe(404)
+  })
+
+  it('honours enable_data=true on a programmatic upload with an API token', async () => {
+    const tokenRes = await fetch(`${getBaseUrl()}/api/user/tokens`, {
+      method: 'POST',
+      headers: { Cookie: userCookie, 'Content-Type': 'application/json' },
+      body: jsonBody({ nickname: `data-${randomUUID()}` }),
+    })
+    expect(tokenRes.status).toBe(200)
+    const { token } = await tokenRes.json()
+
+    const created = await fetch(`${getBaseUrl()}/api/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, ...nextHeaders() },
+      body: uploadForm('dummy.html', { password: sitePassword, enable_data: 'true' }),
+    }).then(readJson<Record<string, string>>)
+    expect(created.data_enabled).toBe('true')
+
+    const items = await siteRequest(created.slug!, '/_jolt/data/v1/collections/todos/items')
+    expect(items.status).toBe(401)
+    const payload = await items.json()
+    expect(payload.login_url).toBe('/_jolt/data/login')
+  })
+
+  it('keeps the data API enabled when site content is replaced', async () => {
+    const created = await createSite({ password: sitePassword, enable_data: 'true' }, { Cookie: userCookie })
+
+    const replacement = `<!DOCTYPE html><html><head><title>Replaced</title></head><body><h1>Replaced Content</h1></body></html>`
+    const form = new FormData()
+    form.append('file', new Blob([replacement], { type: 'text/html' }), 'index.html')
+    form.append('owner_token', created.owner_token!)
+    const replaced = await fetch(`${getBaseUrl()}/api/uploads/${created.slug}/content`, {
+      method: 'PUT',
+      headers: nextHeaders({ Cookie: userCookie }),
+      body: form,
+    })
+    expect(replaced.status).toBe(200)
+
+    // The replacement is live: the protected root still redirects to Jolt's unlock form.
+    const page = await siteRequest(created.slug!, '/')
+    expect(page.status).toBe(302)
+    expect(page.headers.get('location')).toBe('/_jolt/unlock')
+
+    // Replacing files never touches the data toggle: still enabled, still sign-in gated.
+    const items = await siteRequest(created.slug!, '/_jolt/data/v1/collections/todos/items')
+    expect(items.status).toBe(401)
+    const payload = await items.json()
+    expect(payload.login_url).toBe('/_jolt/data/login')
+  })
+
   it('refuses to enable data for a site the caller does not own', async () => {
     const created = await createSite({ password: sitePassword }, { Cookie: userCookie })
 
@@ -1242,13 +1323,14 @@ describe('hosted site data API integration', () => {
     expect((await post('/_jolt/data/v1/collections/todos/items', 'not json')).status).toBe(400)
     expect((await post('/_jolt/data/v1/collections/todos/items', jsonBody({}))).status).toBe(400)
 
-    // A 4 KiB+ record is rejected even though the request body is under 8 KiB.
-    const bigRecord = jsonBody({ value: { text: 'x'.repeat(5000) } })
-    expect(bigRecord.length).toBeLessThan(8192)
+    // A record over the record limit is rejected even though the request body is
+    // within the body bound.
+    const bigRecord = jsonBody({ value: { text: 'x'.repeat(MAX_RECORD_BYTES) } })
+    expect(bigRecord.length).toBeLessThan(DATA_BODY_MAX_BYTES)
     expect((await post('/_jolt/data/v1/collections/todos/items', bigRecord)).status).toBe(413)
 
-    // A body over the 8 KiB bound is rejected before parsing.
-    const huge = jsonBody({ value: { text: 'y'.repeat(12_000) } })
+    // A body over the body bound is rejected before parsing.
+    const huge = jsonBody({ value: { text: 'y'.repeat(DATA_BODY_MAX_BYTES) } })
     expect((await post('/_jolt/data/v1/collections/todos/items', huge)).status).toBe(413)
 
     // Non-JSON content types are refused.
@@ -1264,7 +1346,7 @@ describe('hosted site data API integration', () => {
   it('enforces the per-site collection quota', async () => {
     const { created, dataCookie } = await createDataSite()
     const slug = created.slug!
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < MAX_COLLECTIONS; i++) {
       const res = await siteRequest(slug, `/_jolt/data/v1/collections/list-${i}/items`, {
         method: 'POST',
         cookie: dataCookie,

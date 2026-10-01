@@ -35,7 +35,7 @@ watch(turnstileContainer, (element) => {
 }, { flush: 'post' })
 onUnmounted(() => cleanupTurnstile())
 
-type UploadResult = { url: string; slug: string; owner_token?: string; url_with_unlock?: string }
+type UploadResult = { url: string; slug: string; owner_token?: string; url_with_unlock?: string; data_enabled?: string }
 
 const expirationOptions = [
   { value: '1h', label: '1 hour' },
@@ -47,7 +47,12 @@ const expirationOptions = [
 const expiration = ref('1h')
 const password = ref('')
 const siteTitle = ref('')
+const dataApiEnabled = ref(false)
 const selectedFile = ref<File | null>(null)
+
+const dataApiToggleAvailable = computed(() =>
+  siteConfig.value?.dataFeatureAvailable === true && siteConfig.value?.dataApiToggleEnabled !== false
+)
 
 function saveResultToStorage(res: UploadResult) {
   if (import.meta.client) {
@@ -131,6 +136,11 @@ async function submitForm() {
     nextTick(() => errorEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
     return
   }
+  if (dataApiEnabled.value && !password.value.trim()) {
+    error.value = 'The Data API requires a password — set one or untick “Enable Data API”.'
+    nextTick(() => errorEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
+    return
+  }
   error.value = null
   uploading.value = true
   try {
@@ -141,6 +151,9 @@ async function submitForm() {
     }
     if (password.value.trim()) {
       form.append('password', password.value.trim())
+    }
+    if (dataApiEnabled.value) {
+      form.append('enable_data', 'true')
     }
     if (siteTitle.value.trim()) {
       form.append('title', siteTitle.value.trim())
@@ -345,6 +358,21 @@ const boxPowered = ref(false)
             autocomplete="new-password"
             :disabled="uploading"
           />
+        </div>
+        <div v-if="dataApiToggleAvailable" class="form-group data-api-group">
+          <label for="data-api" class="data-api-check">
+            <input
+              id="data-api"
+              v-model="dataApiEnabled"
+              type="checkbox"
+              class="data-api-check-input"
+              :disabled="uploading"
+            />
+            <span class="data-api-check-label">Enable Data API</span>
+          </label>
+          <p class="data-api-hint">
+            Adds password-protected JSON storage for your site. Requires a password.
+          </p>
         </div>
       </div>
 
@@ -678,6 +706,33 @@ select#expiration option {
 }
 .form-input::placeholder {
   color: #71717a;
+}
+.data-api-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+.data-api-check-input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: #a78bfa;
+  cursor: pointer;
+}
+.data-api-check-input:disabled {
+  cursor: not-allowed;
+}
+.data-api-check-label {
+  font-size: 0.9rem;
+  color: #e4e4e7;
+}
+.data-api-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #a1a1aa;
 }
 .turnstile-wrap {
   margin-top: 1.25rem;

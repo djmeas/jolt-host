@@ -164,6 +164,12 @@
           <td>No</td>
           <td>Auto-delete after: <code>1h</code>, <code>8h</code>, <code>24h</code>, <code>1w</code>, or <code>1d</code></td>
         </tr>
+        <tr>
+          <td><code>enable_data</code></td>
+          <td>String</td>
+          <td>No</td>
+          <td><code>true</code> enables the site data API at creation; requires <code>password</code></td>
+        </tr>
       </tbody>
     </table>
 
@@ -190,23 +196,25 @@
       <li><strong>entry_point</strong> – Path to the main HTML file</li>
       <li><strong>owner_token</strong> – Returned only in this response (never in a URL); use it to replace files, update password or expiration via <code>/api/paste/[slug]/password</code> and <code>/api/paste/[slug]/expiration</code>, or delete the site</li>
       <li><strong>url_with_unlock</strong> – (when password provided) Shareable URL with a signed token; visiting it unlocks the page automatically, read-only for site data. Token expires when the paste expires (or in 30 days if no expiration). The password is never shown in the URL.</li>
+      <li><strong>data_enabled</strong> – (when the Data API was enabled at creation) Confirms the site's data API is on; switch it off later with <code>PUT /api/uploads/[slug]/data</code></li>
     </ul>
 
     <h2>Examples</h2>
 
     <h3>cURL</h3>
     <pre><code># Basic upload
-curl -X POST https://your-host.com/api/upload \
+curl -X POST https://host.example.com/api/upload \
   -F "file=@./index.html"
 
-# With password and expiration
-curl -X POST https://your-host.com/api/upload \
+# With password, expiration, and Data API enabled
+curl -X POST https://host.example.com/api/upload \
   -F "file=@./site.zip" \
   -F "password=my-secret" \
-  -F "expiration=24h"
+  -F "expiration=24h" \
+  -F "enable_data=true"
 
 # With API token (add Authorization header)
-curl -X POST https://your-host.com/api/upload \
+curl -X POST https://host.example.com/api/upload \
   -H "Authorization: Bearer jolt_YOUR_TOKEN_HERE" \
   -F "file=@./index.html"</code></pre>
 
@@ -221,7 +229,7 @@ if (apiToken) {
   headers['Authorization'] = `Bearer ${apiToken}`
 }
 
-const response = await fetch('https://your-host.com/api/upload', {
+const response = await fetch('https://host.example.com/api/upload', {
   method: 'POST',
   headers,
   body: formData,
@@ -239,7 +247,7 @@ if api_token:
 
 with open('index.html', 'rb') as f:
     response = requests.post(
-        'https://your-host.com/api/upload',
+        'https://host.example.com/api/upload',
         headers=headers,
         files={'file': ('index.html', f, 'text/html')},
         data={'password': 'optional', 'expiration': '24h'},

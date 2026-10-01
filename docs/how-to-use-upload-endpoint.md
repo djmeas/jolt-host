@@ -37,7 +37,8 @@ Register at `/register` if sign-up is enabled; when `ENABLE_REGISTRATION=false`,
 |--------------|--------|----------|------------------------------------------------------------------------------|
 | `file`       | File   | Yes      | An `.html` file, `.md` file, or `.zip` archive containing a static site      |
 | `password`   | String | No       | Password to protect the paste (max 200 chars)                                |
-| `expiration` | String | No       | Auto-delete after: `1h`, `8h`, `24h`, `1w`, or `1d` (e.g. `24h` = 24 hours) |
+| `expiration` | String | No       | Auto-delete after: `1h`, `8h`, `24h`, `1w`, or `1d` (e.g. `24h` = 24 hours)  |
+| `enable_data` | String | No      | `true` to enable the [site data API](jolt-data-api.md) at creation. Requires `password` (400 without one), fails `503` when the deployment cannot host the data feature, and `403` when `ENABLE_DATA_API_TOGGLE=false`. |
 
 **Limits**
 
@@ -80,7 +81,7 @@ Replaces the **entire** published file set for an existing site while keeping it
 | `file`        | File   | Yes      | An `.html` file, `.md` file, or `.zip` archive containing the full new site |
 | `owner_token` | String | No       | The site's owner token, when ownership is not proven by a login or admin session |
 
-**What stays the same:** the slug, the canonical hosted URL, title, password (and its unlock link), owner token, `created_at`, and `expires_at`. Updating content does not restart expiration and never issues a new owner token. The response contains only `slug`, `url`, and `entry_point` — the owner token is never echoed back.
+**What stays the same:** the slug, the canonical hosted URL, title, password (and its unlock link), owner token, `created_at`, and `expires_at`. The Data API state is untouched too — records and the enabled/disabled toggle survive replacement. Updating content does not restart expiration and never issues a new owner token. The response contains only `slug`, `url`, and `entry_point` — the owner token is never echoed back.
 
 **What changes:** the stored file set and the `entry_point`. A ZIP's entry point is chosen the same way as at creation (`index.html` at the root first, otherwise the first HTML file alphabetically, including nested paths).
 
@@ -121,12 +122,12 @@ Pass `owner_token` as a form field, never in the URL or query string.
 
 ```bash
 # Replace the files at quick-dragon-42, keeping the same URL
-curl -X PUT https://your-host.com/api/uploads/quick-dragon-42/content \
+curl -X PUT https://host.example.com/api/uploads/quick-dragon-42/content \
   -F "file=@./site-v2.zip" \
   -F "owner_token=abc123..."
 
 # As the signed-in owner, no owner token needed
-curl -X PUT https://your-host.com/api/uploads/quick-dragon-42/content \
+curl -X PUT https://host.example.com/api/uploads/quick-dragon-42/content \
   -b cookies.txt \
   -F "file=@./site-v2.zip"
 ```
@@ -136,7 +137,7 @@ const formData = new FormData()
 formData.append('file', fileInput.files[0])
 formData.append('owner_token', 'abc123...') // omit when logged in as the owner
 
-const res = await fetch('https://your-host.com/api/uploads/quick-dragon-42/content', {
+const res = await fetch('https://host.example.com/api/uploads/quick-dragon-42/content', {
   method: 'PUT',
   body: formData,
 })
@@ -149,30 +150,31 @@ const { slug, url, entry_point } = await res.json()
 
 ```bash
 # Upload an HTML file
-curl -X POST https://your-host.com/api/upload \
+curl -X POST https://host.example.com/api/upload \
   -H "Authorization: Bearer jolt_YOUR_TOKEN_HERE" \
   -F "file=@./index.html"
 
 # Upload a Markdown file
-curl -X POST https://your-host.com/api/upload \
+curl -X POST https://host.example.com/api/upload \
   -H "Authorization: Bearer jolt_YOUR_TOKEN_HERE" \
   -F "file=@./notes.md"
 
-# Upload a ZIP with password and expiration
-curl -X POST https://your-host.com/api/upload \
+# Upload a ZIP with password, expiration, and the Data API enabled
+curl -X POST https://host.example.com/api/upload \
   -H "Authorization: Bearer jolt_YOUR_TOKEN_HERE" \
   -F "file=@./site.zip" \
   -F "password=my-secret" \
-  -F "expiration=24h"
+  -F "expiration=24h" \
+  -F "enable_data=true"
 
 # Paste raw HTML
-curl -X POST https://your-host.com/api/paste \
+curl -X POST https://host.example.com/api/paste \
   -H "Authorization: Bearer jolt_YOUR_TOKEN_HERE" \
   -H "Content-Type: application/json" \
   -d '{"html": "<h1>Hello</h1>", "expiration": "1w"}'
 
 # Paste raw Markdown
-curl -X POST https://your-host.com/api/markdown \
+curl -X POST https://host.example.com/api/markdown \
   -H "Authorization: Bearer jolt_YOUR_TOKEN_HERE" \
   -H "Content-Type: application/json" \
   -d '{"markdown": "# Hello\n\nThis is **markdown**.", "expiration": "1w"}'
@@ -189,7 +191,7 @@ const formData = new FormData()
 formData.append('file', fileInput.files[0])
 formData.append('expiration', '1w')
 
-const uploadRes = await fetch('https://your-host.com/api/upload', {
+const uploadRes = await fetch('https://host.example.com/api/upload', {
   method: 'POST',
   headers,
   body: formData,
@@ -197,7 +199,7 @@ const uploadRes = await fetch('https://your-host.com/api/upload', {
 console.log((await uploadRes.json()).url)
 
 // Paste raw Markdown
-const mdRes = await fetch('https://your-host.com/api/markdown', {
+const mdRes = await fetch('https://host.example.com/api/markdown', {
   method: 'POST',
   headers: { ...headers, 'Content-Type': 'application/json' },
   body: JSON.stringify({ markdown: '# Hello\n\nWorld', expiration: '24h' }),
@@ -215,7 +217,7 @@ headers = {'Authorization': 'Bearer jolt_YOUR_TOKEN_HERE'}
 # Upload a Markdown file
 with open('notes.md', 'rb') as f:
     response = requests.post(
-        'https://your-host.com/api/upload',
+        'https://host.example.com/api/upload',
         headers=headers,
         files={'file': ('notes.md', f, 'text/markdown')},
         data={'expiration': '24h'},
@@ -224,7 +226,7 @@ print(response.json()['url'])
 
 # Paste raw Markdown
 response = requests.post(
-    'https://your-host.com/api/markdown',
+    'https://host.example.com/api/markdown',
     headers=headers,
     json={'markdown': '# Hello\n\nWorld', 'expiration': '1w'},
 )
@@ -251,7 +253,8 @@ The create endpoints (`/api/upload`, `/api/paste`, `/api/markdown`) return the s
   "url": "https://quick-dragon-42.sites.example.net/",
   "entry_point": "quick-dragon-42/index.md",
   "owner_token": "abc123...",
-  "url_with_unlock": "https://quick-dragon-42.sites.example.net/?unlock=TOKEN"
+  "url_with_unlock": "https://quick-dragon-42.sites.example.net/?unlock=TOKEN",
+  "data_enabled": "true"
 }
 ```
 
@@ -260,6 +263,7 @@ The create endpoints (`/api/upload`, `/api/paste`, `/api/markdown`) return the s
 - **entry_point** — path to the stored file (`index.html`, `index.md`, or the ZIP entry point)
 - **owner_token** — use to update password or expiration via `/api/paste/[slug]/password` and `/api/paste/[slug]/expiration`, to replace files, or to delete the site. It is returned only in this response and never appears in a URL.
 - **url_with_unlock** — *(only when password set)* shareable URL with a signed token that auto-unlocks the page for viewing; expires when the paste expires (or in 30 days if no expiration). It grants read-only access to a data-enabled site.
+- **data_enabled** — *(only when the Data API was enabled at creation)* confirms the site's data API is on; it can be switched off later with `PUT /api/uploads/[slug]/data`.
 
 The replacement endpoint (`PUT /api/uploads/[slug]/content`) returns a smaller shape (200):
 
