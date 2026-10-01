@@ -19,10 +19,24 @@ const SITES_DIR = TEST_MODE
   : join(process.cwd(), 'data', 'sites')
 
 export const COLLECTION_PATTERN = /^[a-z][a-z0-9_-]{0,39}$/
-export const MAX_COLLECTIONS = 10
-export const MAX_RECORDS = 1000
-export const MAX_RECORD_BYTES = 4096
-export const MAX_TOTAL_BYTES = 1024 * 1024
+/**
+ * Per-site quotas. These are deployment policy, not engine limits — SQLite would
+ * take millions of rows — so they are sized for the operator's hardware, and the
+ * three caps have to move together:
+ *   - disk and backups: MAX_TOTAL_BYTES x number of sites is the worst-case
+ *     site-data footprint (uploaded site *files* under storage/ are counted
+ *     separately, and their limit is much larger);
+ *   - per-write cost: enforceQuota() sums the stored payload of every row on
+ *     each mutation, so that check is O(stored bytes). Keep MAX_TOTAL_BYTES in
+ *     the tens of MiB unless the accounting is made O(1) first;
+ *   - request bounds: MAX_RECORD_BYTES must stay well under DATA_BODY_MAX_BYTES
+ *     (see data-api.ts), which leaves room for the {"value":…} envelope plus
+ *     worst-case JSON escaping.
+ */
+export const MAX_COLLECTIONS = 25
+export const MAX_RECORDS = 20000
+export const MAX_RECORD_BYTES = 64 * 1024
+export const MAX_TOTAL_BYTES = 16 * 1024 * 1024
 export const LIST_DEFAULT_LIMIT = 50
 export const LIST_MAX_LIMIT = 100
 export const SITE_DATA_RETIRE_GRACE_MS = 5 * 60 * 1000
@@ -69,7 +83,7 @@ function openDb(uploadId: string): Database.Database {
   return db
 }
 
-/** Validates and serializes a record value: JSON objects only, 4 KiB maximum. */
+/** Validates and serializes a record value: JSON objects only, MAX_RECORD_BYTES maximum. */
 export function serializeRecordValue(value: unknown): string {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw createError({ statusCode: 400, message: 'value must be a JSON object' })
@@ -92,6 +106,13 @@ type QuotaInput = {
   newBytes: number
   replacedBytes: number
   addingRecord: boolean
+}
+
+/** Byte sizes in quota messages are derived, so raising a limit can't leave a stale number behind. */
+function describeBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024 && bytes % (1024 * 1024) === 0) return `${bytes / (1024 * 1024)} MiB`
+  if (bytes >= 1024 && bytes % 1024 === 0) return `${bytes / 1024} KiB`
+  return `${bytes} bytes`
 }
 
 /** Quota checks run inside the write transaction, so concurrent writes cannot slip past them. */
@@ -122,7 +143,7 @@ function enforceQuota(db: Database.Database, input: QuotaInput): void {
   if (used.n - input.replacedBytes + input.newBytes > MAX_TOTAL_BYTES) {
     throw createError({
       statusCode: 409,
-      message: 'This site has reached its 1 MiB stored-data limit',
+      message: `This site has reached its ${describeBytes(MAX_TOTAL_BYTES)} stored-data limit`,
     })
   }
 }

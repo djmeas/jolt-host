@@ -116,11 +116,14 @@ Base: `https://<slug>.<hosted-base>/_jolt/data/v1`
 | `DELETE` | `/collections/<collection>/items/<id>` | data session | `204` |
 
 - Item shape: `{"id":"<uuid>","value":{…},"created_at":"ISO","updated_at":"ISO"}`.
-- Collections match `^[a-z][a-z0-9_-]{0,39}$`; at most **10 collections**, **1,000 records**,
-  **4 KiB** of JSON per record, and **1 MiB** of stored payload per site.
+- Collections match `^[a-z][a-z0-9_-]{0,39}$`; at most **25 collections**, **20,000 records**,
+  **64 KiB** of JSON per record, and **16 MiB** of stored payload per site.
+- These are compile-time constants in `server/utils/site-data.ts` (`server/utils/data-api.ts`
+  for the body bound) and are the same for every site on a deployment. Raising them means
+  editing those files and rebuilding.
 - Lists default to 50 items, max 100, ordered by `(created_at, id)`; `offset` must be ≥ 0.
 - `value` must be a JSON **object** — never a SQL string, table, or schema instruction.
-- Request bodies are capped at 8 KiB before parsing. Responses use `Cache-Control: no-store`.
+- Request bodies are capped at 128 KiB before parsing. Responses use `Cache-Control: no-store`.
 - Status codes: `400` invalid input, `401` no credentials (JSON includes `login_url`),
   `403` view-only session attempting a write or bad `Origin`, `404` unknown/disabled/expired site or
   record, `409` quota reached, `413` too large, `429` rate limited (with `Retry-After`).
