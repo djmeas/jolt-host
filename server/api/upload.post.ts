@@ -11,6 +11,9 @@ import { checkUploadRateLimit, getClientIP } from '~/server/utils/rate-limit'
 import { requireUploadAuthorization, hasValidApiToken, resolveUploadUserId } from '~/server/utils/upload-auth'
 import { verifyTurnstileToken } from '~/server/utils/turnstile'
 import { writeUploadContent, isAcceptedUploadFilename, resolveUploadMaxBytes } from '~/server/utils/upload-content'
+import { dataApiToggleEnabled } from '~/server/utils/upload-mode'
+import { getDataFeatureStatus } from '~/server/utils/data-auth'
+import { enableDataBySlug } from '~/server/utils/db'
 
 const STORAGE = getStorageDir()
 
@@ -79,6 +82,27 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Password too long' })
   }
 
+  const enableDataField = form.find((f) => f.name === 'enable_data' && typeof f.data === 'object')
+  const enableDataRaw = enableDataField?.data
+  const enableDataRequested = enableDataRaw && Buffer.isBuffer(enableDataRaw)
+    ? ['true', '1', 'on', 'yes'].includes(enableDataRaw.toString('utf8').trim().toLowerCase())
+    : false
+  if (enableDataRequested) {
+    if (!dataApiToggleEnabled()) {
+      throw createError({ statusCode: 403, message: 'The Data API opt-in is disabled on this deployment' })
+    }
+    if (password.length === 0) {
+      throw createError({ statusCode: 400, message: 'The Data API requires a site password' })
+    }
+    const feature = getDataFeatureStatus()
+    if (!feature.enabled) {
+      throw createError({
+        statusCode: 503,
+        message: feature.reason ?? 'Site data is not available on this deployment',
+      })
+    }
+  }
+
   const expirationField = form.find((f) => f.name === 'expiration' && typeof f.data === 'object')
   const expirationRaw = expirationField?.data
   const expiration = expirationRaw && Buffer.isBuffer(expirationRaw) ? expirationRaw.toString('utf8').trim() : ''
@@ -143,6 +167,8 @@ export default defineEventHandler(async (event) => {
 
   insertUpload(id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId, title || null)
 
+  const dataEnabled = enableDataRequested ? enableDataBySlug(slug) : false
+
   const response: Record<string, string> = {
     slug,
     url,
@@ -150,6 +176,9 @@ export default defineEventHandler(async (event) => {
     owner_token: ownerToken,
     expires_at: expiresAt ?? '',
     title: title || '',
+  }
+  if (dataEnabled) {
+    response.data_enabled = 'true'
   }
   if (password.length > 0) {
     const unlockToken = createUnlockToken(slug, expiresAt)

@@ -8,6 +8,7 @@ import {
   MAX_COLLECTIONS,
   MAX_RECORDS,
   MAX_RECORD_BYTES,
+  MAX_TOTAL_BYTES,
   createItem,
   deleteItem,
   deleteSiteData,
@@ -41,9 +42,14 @@ function seed(id: string, rows: { collection: string; value: string }[]): void {
   const insert = db.prepare(
     'INSERT INTO items (collection, id, value_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
   )
-  rows.forEach((row, index) => {
-    insert.run(row.collection, randomUUID(), row.value, `2026-01-01T00:00:${String(index).padStart(2, '0')}.000Z`, '2026-01-01T00:00:00.000Z')
+  // One transaction: inserting row-by-row commits (and fsyncs) per statement,
+  // which makes seeding tens of thousands of rows take minutes on a bind mount.
+  const insertAll = db.transaction((batch: { collection: string; value: string }[]) => {
+    batch.forEach((row, index) => {
+      insert.run(row.collection, randomUUID(), row.value, `2026-01-01T00:00:${String(index).padStart(2, '0')}.000Z`, '2026-01-01T00:00:00.000Z')
+    })
   })
+  insertAll(rows)
   db.close()
 }
 
@@ -196,17 +202,20 @@ describe('transactional quotas', () => {
 
   it('counts replacements against the total payload quota', () => {
     const id = freshId()
-    const chunk = `{"text":"${'y'.repeat(2000)}"}`
+    // Fill with near-record-sized rows so the payload quota is reached without
+    // needing an enormous row count (sizes derive from the quotas themselves).
+    const chunk = `{"text":"${'y'.repeat(MAX_RECORD_BYTES - 512)}"}`
+    const rowsToFill = Math.ceil(MAX_TOTAL_BYTES / Buffer.byteLength(chunk, 'utf8'))
     seed(
       id,
-      Array.from({ length: 521 }, () => ({ collection: 'todos', value: chunk }))
+      Array.from({ length: rowsToFill }, () => ({ collection: 'todos', value: chunk }))
     )
     const existing = listItems(id, 'todos', 1, 0).items[0]
-    // A record that is itself within the 4 KiB limit can still push the site
-    // past its 1 MiB total.
-    const grown = `{"text":"${'y'.repeat(4085)}"}`
+    // A record that is itself within the record limit can still push the site
+    // past its total payload quota.
+    const grown = `{"text":"${'y'.repeat(MAX_RECORD_BYTES - 11)}"}`
     expect(Buffer.byteLength(grown, 'utf8')).toBe(MAX_RECORD_BYTES)
-    expect(() => replaceItem(id, 'todos', existing.id, grown)).toThrowError(/1 MiB/)
+    expect(() => replaceItem(id, 'todos', existing.id, grown)).toThrowError(/stored-data limit/)
     // Shrinking is fine.
     expect(replaceItem(id, 'todos', existing.id, '{"text":"small"}')).not.toBeNull()
   })

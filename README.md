@@ -115,6 +115,8 @@ More detail and examples: [docs/how-to-use-upload-endpoint.md](docs/how-to-use-u
 - **Database** — `./data/jolt.db` (SQLite). Tables: `uploads` (`id`, `slug`, `entry_point`, `password_hash`, `owner_token`, `created_at`, `expires_at`, `data_enabled`), `api_tokens` (`id`, `nickname`, `token_hash`, `created_at`).
 - **Site data** — one SQLite file per data-enabled site at `./data/sites/<upload-id>.sqlite` (plus `-wal`/`-shm`), created lazily on the first authorized write. These files are never served over HTTP and are deleted with their site. Back them up with SQLite's consistent backup, not a raw copy; see [docs/jolt-data-api.md](docs/jolt-data-api.md).
 - **Files** — new uploads are stored as `./storage/[slug]/`. After an update, the current file set lives under `./storage/.content/[slug]/[generation-id]/`, and the row's `entry_point` points at the active generation. Replaced generations are moved to `./storage/.trash/` for a short grace period, and abandoned staging under `./storage/.staging/` is pruned by the scheduled cleanup task.
+- **Notes example** — upload `examples/notes/index.html` with site data enabled for a responsive notes workspace with colored cards, grid/list layouts, dark mode, and reduced-motion-aware animations. Viewing and editing still use Jolt's existing site-data access rules.
+  DM Sans loads from Google Fonts with a system-font fallback. A plain static server previews the interface but does not provide the `/_jolt/data` endpoints.
 
 ## Environment
 

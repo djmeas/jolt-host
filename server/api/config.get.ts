@@ -1,4 +1,4 @@
-import { registeredUsersOnly, registrationEnabled } from '~/server/utils/upload-mode'
+import { registeredUsersOnly, registrationEnabled, dataApiToggleEnabled } from '~/server/utils/upload-mode'
 import { getDataFeatureStatus } from '~/server/utils/data-auth'
 
 export default defineEventHandler(() => {
@@ -8,5 +8,6 @@ export default defineEventHandler(() => {
     registrationEnabled: registrationEnabled(),
     landingPageEnabled: process.env.ENABLE_LANDING_PAGE !== 'false',
     dataFeatureAvailable: getDataFeatureStatus().enabled,
+    dataApiToggleEnabled: dataApiToggleEnabled(),
   }
 })

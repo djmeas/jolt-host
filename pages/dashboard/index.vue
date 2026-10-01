@@ -26,7 +26,7 @@ const { data: adminSession } = await useFetch('/api/admin/session', { key: 'admi
 const isAdmin = computed(() => adminSession.value?.authenticated ?? false)
 const { data: siteConfig } = await useFetch('/api/config')
 const dataFeatureAvailable = computed(() => siteConfig.value?.dataFeatureAvailable === true)
-const { siteUrlFor } = useSiteUrl()
+const { siteUrlFor, origins } = useSiteUrl()
 
 if (!isAdmin.value && !isLoggedIn.value) await refreshUser()
 if (!isAdmin.value && !isLoggedIn.value) await navigateTo('/login')
@@ -267,6 +267,114 @@ async function copyDataLoginUrl(upload: UploadRow) {
   }
 }
 
+async function copyDataApiBaseUrl(upload: UploadRow) {
+  const url = dataApiBaseUrl(upload)
+  try {
+    await navigator.clipboard.writeText(url)
+    dataError.value = null
+  } catch {
+    dataError.value = url
+  }
+}
+
+function dataApiBaseUrl(upload: UploadRow): string {
+  return `${buildUrl(upload).replace(/\/$/, '')}/_jolt/data/v1`
+}
+
+// --- Data API reference panel ---
+// The body is rendered from docs/jolt-data-api.md by /api/data-api, so the
+// dashboard never restates the API contract and cannot drift from the doc.
+const dataApiPanelOpen = ref(false)
+const dataApiDoc = ref<string | null>(null)
+const dataApiDocLoading = ref(false)
+const dataApiDocError = ref<string | null>(null)
+
+const siteBaseHost = computed(() => {
+  const base = origins.value.siteBaseOrigin
+  if (!base) return ''
+  try {
+    return new URL(base).host
+  } catch {
+    return base.replace(/^https?:\/\//, '')
+  }
+})
+
+const dataApiUrlScheme = computed(() => {
+  const base = origins.value.siteBaseOrigin
+  if (!base) return 'https'
+  try {
+    return new URL(base).protocol.replace(/:$/, '')
+  } catch {
+    return 'https'
+  }
+})
+
+const dataApiUrlTemplate = computed(() =>
+  siteBaseHost.value
+    ? `${dataApiUrlScheme.value}://<slug>.${siteBaseHost.value}/_jolt/data/v1`
+    : 'site base origin not configured'
+)
+
+const dataApiLoginTemplate = computed(() =>
+  siteBaseHost.value
+    ? `${dataApiUrlScheme.value}://<slug>.${siteBaseHost.value}/_jolt/data/login`
+    : 'site base origin not configured'
+)
+
+const dataEnabledCount = computed(() => uploads.value.filter((u) => isDataEnabled(u)).length)
+
+// --- Agent instruction copy ---
+const dataApiAgentCopied = ref(false)
+const dataApiAgentError = ref<string | null>(null)
+
+const dataApiAgentInstructions = computed(() => {
+  const base = dataApiUrlTemplate.value
+  const login = dataApiLoginTemplate.value
+  return `Use the Jolt Host Site Data API for my site.
+
+Per-site URLs (replace <slug> with my site's slug):
+- API base URL: ${base}
+- Sign in for writes: ${login}
+
+JSON API (same-origin only, no CORS):
+- GET    ${base}/collections/<collection>/items?limit=&offset=   -> 200 {"items":[...],"next_offset":number|null}
+- POST   ${base}/collections/<collection>/items                  -> 201 (body {"value": {…}})
+- PATCH  ${base}/collections/<collection>/items/<id>             -> 200 (replaces the whole value)
+- DELETE ${base}/collections/<collection>/items/<id>             -> 204
+
+Rules:
+- Reads need the view/unlock session; writes need a data-admin session from the login URL (site password). Credentials are HttpOnly cookies — use fetch() with relative URLs from pages served on the site host.
+- Collections match ^[a-z][a-z0-9_-]{0,39}$; "value" must be a JSON object.
+- Limits: 25 collections, 20,000 records, 64 KiB per record, 128 KiB request body.
+- On 401 the response includes {"login_url": "..."} — surface that link so the visitor can sign in.`
+})
+
+async function copyDataApiAgentInstructions() {
+  dataApiAgentError.value = null
+  try {
+    await navigator.clipboard.writeText(dataApiAgentInstructions.value)
+    dataApiAgentCopied.value = true
+    setTimeout(() => { dataApiAgentCopied.value = false }, 2000)
+  } catch {
+    dataApiAgentError.value = 'Clipboard unavailable — select and copy the text below.'
+  }
+}
+
+async function toggleDataApiPanel() {
+  dataApiPanelOpen.value = !dataApiPanelOpen.value
+  if (!dataApiPanelOpen.value || dataApiDoc.value || dataApiDocLoading.value) return
+  dataApiDocLoading.value = true
+  dataApiDocError.value = null
+  try {
+    const res = await $fetch<{ html: string }>('/api/data-api')
+    dataApiDoc.value = res.html
+  } catch {
+    dataApiDocError.value = 'Could not load the data API reference.'
+  } finally {
+    dataApiDocLoading.value = false
+  }
+}
+
 // --- Account settings ---
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -411,6 +519,67 @@ onMounted(() => {
         <p v-if="uploadsError" class="section-error">{{ uploadsError }}</p>
         <p v-if="dataError" class="section-error">{{ dataError }}</p>
 
+        <section v-if="dataFeatureAvailable" class="data-api-panel">
+          <button
+            type="button"
+            class="data-api-panel__toggle"
+            :aria-expanded="dataApiPanelOpen"
+            @click="toggleDataApiPanel"
+          >
+            <span class="data-api-panel__chevron" :class="{ 'is-open': dataApiPanelOpen }" aria-hidden="true">▸</span>
+            Data API reference
+            <span class="data-api-panel__meta">
+              {{ dataEnabledCount }} of {{ uploads.length }} on this page enabled
+            </span>
+          </button>
+
+          <div v-if="dataApiPanelOpen" class="data-api-panel__body">
+            <p class="data-api-panel__lead">
+              Site data is opt-in per site and always served from the site's own origin. Turn it on from the
+              <strong>Data API</strong> column below, then copy the URLs a client needs. Unlock links stay
+              read-only; writing requires the site password.
+            </p>
+
+            <div class="data-api-agent">
+              <div class="data-api-agent__row">
+                <div class="data-api-agent__text">
+                  <strong>Wiring a site up to the Data API?</strong>
+                  <span>Copy these instructions and give them to your coding agent — Claude Code, Codex, Cursor, etc. — to do it for you.</span>
+                </div>
+                <button
+                  type="button"
+                  class="action-btn"
+                  @click="copyDataApiAgentInstructions"
+                >
+                  {{ dataApiAgentCopied ? 'Copied!' : 'Copy agent instructions' }}
+                </button>
+              </div>
+              <p v-if="dataApiAgentError" class="section-error data-api-agent__error">{{ dataApiAgentError }}</p>
+              <pre v-if="dataApiAgentError" class="data-api-agent__fallback">{{ dataApiAgentInstructions }}</pre>
+            </div>
+
+            <dl class="data-api-urls">
+              <div class="data-api-url">
+                <dt>API base URL — per site</dt>
+                <dd><code>{{ dataApiUrlTemplate }}</code></dd>
+              </div>
+              <div class="data-api-url">
+                <dt>Write session — per site</dt>
+                <dd><code>{{ dataApiLoginTemplate }}</code></dd>
+              </div>
+            </dl>
+
+            <p class="data-api-panel__hint">
+              Use <em>Copy API base URL</em> or <em>Copy data login URL</em> in a row's ⋯ menu to copy the
+              real URL for that site.
+            </p>
+
+            <p v-if="dataApiDocLoading" class="data-api-panel__status">Loading reference…</p>
+            <p v-else-if="dataApiDocError" class="section-error">{{ dataApiDocError }}</p>
+            <article v-else-if="dataApiDoc" class="data-api-doc" v-html="dataApiDoc" />
+          </div>
+        </section>
+
         <div v-if="uploadsLoading && !uploadsData" class="empty muted">Loading…</div>
 
         <div v-else-if="uploads.length === 0 && uploadsData" class="empty muted">
@@ -532,6 +701,14 @@ onMounted(() => {
                               @click="copyDataLoginUrl(u); closeMenu()"
                             >
                               Copy data login URL
+                            </button>
+                            <button
+                              v-if="isDataEnabled(u)"
+                              type="button"
+                              class="menu-item"
+                              @click="copyDataApiBaseUrl(u); closeMenu()"
+                            >
+                              Copy API base URL
                             </button>
                           </div>
                         </Teleport>
@@ -1166,5 +1343,243 @@ onMounted(() => {
 }
 .back-link:hover {
   color: #a78bfa;
+}
+/* ---------- Data API reference panel ---------- */
+.data-api-panel {
+  margin: 0 0 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+.data-api-panel__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e4e4e7;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+.data-api-panel__toggle:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.data-api-panel__chevron {
+  display: inline-block;
+  color: #a78bfa;
+  transition: transform 0.15s ease;
+}
+.data-api-panel__chevron.is-open {
+  transform: rotate(90deg);
+}
+.data-api-panel__meta {
+  margin-left: auto;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #a1a1aa;
+}
+.data-api-panel__body {
+  padding: 0 1rem 1.15rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.data-api-panel__lead {
+  margin: 1rem 0;
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: #a1a1aa;
+}
+.data-api-agent {
+  margin: 0 0 1rem;
+  padding: 0.8rem;
+  background: rgba(167, 139, 250, 0.07);
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  border-radius: 8px;
+}
+.data-api-agent__row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.data-api-agent__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.data-api-agent__text strong {
+  color: #e4e4e7;
+  font-size: 0.9rem;
+}
+.data-api-agent__text span {
+  font-size: 0.83rem;
+  line-height: 1.5;
+  color: #a1a1aa;
+}
+.data-api-agent__error {
+  margin: 0.5rem 0 0;
+}
+.data-api-agent__fallback {
+  margin: 0.5rem 0 0;
+  padding: 0.7rem;
+  font-family: ui-monospace, 'Cascadia Code', Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: #c4b5fd;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 18rem;
+  overflow: auto;
+}
+.data-api-panel__hint {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: #a1a1aa;
+}
+.data-api-panel__status {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #a1a1aa;
+}
+.data-api-urls {
+  margin: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.data-api-url dt {
+  margin: 0 0 0.25rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #a1a1aa;
+}
+.data-api-url dd {
+  margin: 0;
+}
+.data-api-url code {
+  font-family: ui-monospace, 'Cascadia Code', Menlo, monospace;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.6rem;
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #c4b5fd;
+  word-break: break-all;
+}
+/* Markdown rendered from docs/jolt-data-api.md */
+.data-api-doc {
+  max-height: 32rem;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 1rem;
+}
+.data-api-doc :deep(h1) {
+  font-size: 1.35rem;
+  margin: 0 0 0.75rem;
+  color: #f4f4f5;
+}
+.data-api-doc :deep(h2) {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem;
+  padding-bottom: 0.35rem;
+  color: #e4e4e7;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.data-api-doc :deep(h3) {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0.4rem;
+  color: #d4d4d8;
+}
+.data-api-doc :deep(p),
+.data-api-doc :deep(li) {
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: #a1a1aa;
+}
+.data-api-doc :deep(p) {
+  margin: 0 0 0.85rem;
+}
+.data-api-doc :deep(ul),
+.data-api-doc :deep(ol) {
+  margin: 0 0 0.85rem;
+  padding-left: 1.4rem;
+}
+.data-api-doc :deep(strong) {
+  color: #e4e4e7;
+}
+.data-api-doc :deep(a) {
+  color: #a78bfa;
+  text-decoration: none;
+}
+.data-api-doc :deep(a:hover) {
+  text-decoration: underline;
+}
+.data-api-doc :deep(code) {
+  font-family: ui-monospace, 'Cascadia Code', Menlo, monospace;
+  font-size: 0.8em;
+  padding: 0.15em 0.4em;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #c4b5fd;
+}
+.data-api-doc :deep(pre) {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.9rem 1.1rem;
+  overflow-x: auto;
+  margin: 0 0 0.9rem;
+}
+.data-api-doc :deep(pre code) {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.82rem;
+  color: #d4d4d8;
+}
+.data-api-doc :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin: 0 0 0.9rem;
+}
+.data-api-doc :deep(th) {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #d4d4d8;
+  font-weight: 600;
+}
+.data-api-doc :deep(td) {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #a1a1aa;
+  vertical-align: top;
+}
+.data-api-doc :deep(hr) {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 1.25rem 0;
+}
+@media (max-width: 640px) {
+  .data-api-panel__meta {
+    display: none;
+  }
 }
 </style>

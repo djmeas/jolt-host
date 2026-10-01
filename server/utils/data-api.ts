@@ -9,10 +9,11 @@ import {
   LIST_MAX_LIMIT,
 } from '~/server/utils/site-data'
 
-/** Request bodies are bounded before parsing, not after. */
-export const DATA_BODY_MAX_BYTES = 8 * 1024
+/** Request bodies are bounded before parsing, not after. Kept ~2x MAX_RECORD_BYTES
+ *  so the {"value":…} envelope and worst-case escaping always fit. */
+export const DATA_BODY_MAX_BYTES = 128 * 1024
 /** Absolute drain ceiling: larger bodies drop the connection instead of streaming forever. */
-const DATA_BODY_DRAIN_CEILING_BYTES = 256 * 1024
+const DATA_BODY_DRAIN_CEILING_BYTES = 1024 * 1024
 
 export const DATA_LOGIN_URL = '/_jolt/data/login'
 

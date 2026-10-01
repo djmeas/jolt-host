@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f8f9fc; --surface: #ffffff; --sidebar: #edf0f9;
+    --text: #262b43; --muted: #697087; --border: #e3e6ef;
+    --accent: #5262d8; --accent-soft: #e6e9ff; --accent-text: #fff;
+    --yellow: #fff0bd; --orange: #ffe0c0; --red: #ffd9d4; --green: #deefdc;
+    --teal: #d4eee9; --blue: #dceaf9; --purple: #e6dff7; --pink: #f7dfeb;
+    --brown: #eaddd1; --gray: #e8ebf1;
+    --shadow: 0 12px 36px -18px rgb(38 43 67 / 22%);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 100px; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.55 "DM Sans", "Avenir Next", -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  button, input, textarea { font: inherit; color: inherit; }
+  button, a, input, textarea { -webkit-tap-highlight-color: transparent; }
+  button { cursor: pointer; }
+  a { color: inherit; }
+  button { touch-action: manipulation; }
+  [hidden] { display: none !important; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+  .icon { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .skip-link { position: fixed; top: -80px; left: 16px; z-index: 50; padding: 12px 20px; background: var(--surface); border-radius: 10px; }
+  .skip-link:focus { top: 12px; }
+  .app-shell { min-height: 100dvh; display: grid; grid-template-columns: 224px minmax(0, 1fr); animation: arrive 600ms cubic-bezier(.2,.8,.2,1) both; }
+  .sidebar {
+    position: sticky; top: 0; height: 100dvh; padding: 32px 20px 24px;
+    display: flex; flex-direction: column; background: var(--sidebar); border-right: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; padding: 0 12px; text-decoration: none; }
+  .brand-name { font-size: 27px; font-weight: 700; letter-spacing: -1.2px; }
+  .brand-mark { display: grid; place-items: center; width: 38px; height: 42px; color: white; background: var(--accent); border-radius: 12px 12px 12px 4px; transform: rotate(-7deg); }
+  .brand-mark .icon { width: 23px; height: 23px; transform: rotate(7deg); }
+  .workspace-label { color: var(--muted); margin: 22px 12px 36px; font-size: 12px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 13px 12px; text-decoration: none; border-radius: 12px; background: var(--surface); box-shadow: 0 3px 8px rgb(38 43 67 / 3%); font-weight: 600; }
+  .nav-item .icon { color: var(--accent); }
+  #count { margin-left: auto; font-size: 11px; font-weight: 500; white-space: nowrap; color: var(--muted); }
+  .sidebar-bottom { margin-top: auto; padding: 24px 12px 0; }
+  .sidebar-tip { margin-bottom: 34px; color: var(--muted); font-size: 12px; line-height: 1.7; max-width: 150px; }
+  .sidebar-tip .icon { color: var(--accent); margin-bottom: 9px; }
+  .sidebar-tip p { margin: 0; }
+  .powered { font-size: 11px; color: var(--muted); margin: 14px 0 0; }
+  .powered strong { color: var(--text); font-weight: 600; }
+  .pill { font-size: 11px; color: var(--muted); }
+  #mode { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  #mode::before { content: ""; width: 6px; height: 6px; background: var(--muted); border-radius: 50%; margin-right: 3px; flex: none; }
+  .pill.writable::before { background: #438263; }
+  .pill.readonly::before { background: #ae7d36; }
+  .pill a { text-underline-offset: 3px; }
+  .workspace { min-width: 0; }
+  .topbar { height: 88px; padding: 0 clamp(24px, 4vw, 64px); display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--border); }
+  .topbar-label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .search-wrap { margin-left: auto; display: flex; align-items: center; gap: 10px; padding: 0 14px; width: min(340px, 100%); height: 42px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--muted); transition: border-color 180ms, box-shadow 180ms; }
+  .search-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  #search { width: 100%; min-width: 0; border: 0; outline: none; background: transparent; font-size: 13px; }
+  #search::placeholder { color: var(--muted); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 16px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); font-weight: 500; transition: background 160ms, transform 160ms, box-shadow 160ms; }
+  .btn:hover:not(:disabled) { background: var(--accent-soft); }
+  .btn:active:not(:disabled) { transform: scale(.96); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); box-shadow: 0 4px 10px rgb(82 98 216 / 16%); }
+  .btn.primary:hover:not(:disabled) { background: #4353c9; box-shadow: 0 6px 16px rgb(82 98 216 / 24%); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.icon { width: 34px; height: 34px; padding: 7px; border: 0; background: transparent; color: var(--muted); }
+  .btn.icon svg { width: 17px; height: 17px; }
+  #refresh { width: 42px; height: 42px; border: 1px solid var(--border); background: var(--surface); border-radius: 12px; }
+  #refresh:disabled svg { animation: spin 1s linear infinite; }
+  main { max-width: 1320px; padding: 44px clamp(24px, 4vw, 64px) 64px; margin: 0 auto; }
+  .intro { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
+  h1 { margin: 0 0 6px; font-size: clamp(30px, 3vw, 40px); line-height: 1.2; letter-spacing: -1.6px; font-weight: 600; }
+  .intro p { margin: 0; color: var(--muted); font-size: 14px; }
+  .paper-stack { width: 108px; height: 84px; position: relative; margin-right: 12px; flex: none; }
+  .paper { position: absolute; width: 59px; height: 70px; border-radius: 10px 10px 10px 3px; border: 1px solid rgb(38 43 67 / 6%); }
+  .paper.back { background: var(--purple); transform: rotate(-17deg); top: 9px; left: 9px; }
+  .paper.middle { background: var(--green); transform: rotate(15deg); top: 6px; left: 40px; }
+  .paper.front { background: var(--yellow); transform: rotate(-4deg); left: 24px; top: 0; padding: 18px 12px; box-shadow: 0 5px 10px rgb(38 43 67 / 5%); }
+  .paper.front span { display: block; height: 3px; margin-bottom: 8px; border-radius: 2px; background: #bfac69; opacity: .65; }
+  .paper.front span:last-child { width: 65%; }
+  .composer { margin: 0 0 36px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; transition: border-color 200ms, box-shadow 200ms; }
+  .composer:focus-within { border-color: #adb5ef; box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow); }
+  .writing-area { display: flex; align-items: start; gap: 14px; padding: 22px 24px 12px; background: var(--capture-color, var(--surface)); transition: background 220ms; }
+  .writing-area > .icon { color: var(--accent); margin-top: 4px; }
+  .composer textarea { width: 100%; border: 0; background: none; resize: none; min-height: 64px; max-height: 24rem; outline: none; padding: 0; font-size: 16px; line-height: 1.65; }
+  .composer textarea::placeholder { color: #81879b; }
+  .composer-bar { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-top: 1px solid var(--border); }
+  .grow { flex: 1; }
+  .shortcut { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .counter { font-size: 10px; color: var(--muted); white-space: nowrap; }
+  #new-counter { display: none; }
+  .composer:focus-within #new-counter, #new-counter.over { display: inline; }
+  .counter.over { color: #c23f4e; font-weight: 600; }
+  .swatches { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+  .swatch { width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid rgb(38 43 67 / 15%); background: var(--gray); position: relative; transition: transform 180ms, outline-offset 180ms; }
+  .swatch:hover { transform: translateY(-3px); }
+  .swatch[data-color="default"] { background: var(--surface); }
+  .swatch[data-color="yellow"] { background: var(--yellow); }
+  .swatch[data-color="orange"] { background: var(--orange); }
+  .swatch[data-color="red"] { background: var(--red); }
+  .swatch[data-color="green"] { background: var(--green); }
+  .swatch[data-color="teal"] { background: var(--teal); }
+  .swatch[data-color="blue"] { background: var(--blue); }
+  .swatch[data-color="purple"] { background: var(--purple); }
+  .swatch[data-color="pink"] { background: var(--pink); }
+  .swatch[data-color="brown"] { background: var(--brown); }
+  .swatch[aria-checked="true"] { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .swatch[aria-checked="true"]::after { content: ""; position: absolute; width: 4px; height: 4px; background: var(--text); border-radius: 50%; inset: 0; margin: auto; }
+  .collection-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  h2 { font-size: 18px; font-weight: 600; letter-spacing: -.4px; margin: 0; }
+  .sort-label { margin-left: auto; color: var(--muted); font-size: 12px; }
+  .view-switch { display: flex; gap: 3px; padding: 4px; background: var(--gray); border-radius: 10px; }
+  .view-switch .btn { width: 32px; height: 30px; border-radius: 7px; padding: 6px; }
+  .view-switch .btn[aria-pressed="true"] { background: var(--surface); color: var(--accent); box-shadow: 0 2px 4px rgb(38 43 67 / 8%); }
+  .status { margin: 0 0 24px; padding: 12px 16px; border-radius: 10px; background: var(--accent-soft); border: 1px solid var(--border); font-size: 13px; }
+  .status.error { border-color: #e9b1b6; background: #fff0f1; color: #ab3442; }
+  .status a { color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 20px; align-items: start; }
+  .empty-state { display: flex; flex-direction: column; align-items: center; padding: 64px 24px; border: 1px dashed var(--border); border-radius: 18px; background: var(--surface); text-align: center; }
+  .empty-state > .icon { width: 38px; height: 38px; color: var(--accent); margin-bottom: 18px; stroke-width: 1.2; }
+  .empty { margin: 0; max-width: 340px; color: var(--muted); }
+  article.note { margin: 0; padding: 23px 22px 14px; background: var(--surface); border: 1px solid rgb(38 43 67 / 8%); border-radius: 16px 16px 16px 5px; min-height: 205px; display: flex; flex-direction: column; transition: box-shadow 200ms, border-color 200ms; }
+  article.note:hover, article.note:focus-within { box-shadow: var(--shadow); border-color: rgb(82 98 216 / 25%); }
+  article.note[data-color="yellow"] { background: var(--yellow); }
+  article.note[data-color="orange"] { background: var(--orange); }
+  article.note[data-color="red"] { background: var(--red); }
+  article.note[data-color="green"] { background: var(--green); }
+  article.note[data-color="teal"] { background: var(--teal); }
+  article.note[data-color="blue"] { background: var(--blue); }
+  article.note[data-color="purple"] { background: var(--purple); }
+  article.note[data-color="pink"] { background: var(--pink); }
+  article.note[data-color="brown"] { background: var(--brown); }
+  article.note[data-color="gray"] { background: var(--gray); }
+  .note-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; flex: 1; padding-bottom: 22px; }
+  .note-text::first-line { font-weight: 600; }
+  .note-edit { width: 100%; border: 0; border-radius: 4px; background: transparent; resize: vertical; min-height: 130px; padding: 0; line-height: 1.75; }
+  .note-edit:focus { outline: 2px solid var(--accent); outline-offset: 6px; }
+  .note-bar { display: flex; align-items: center; gap: 2px; margin-top: auto; min-height: 34px; }
+  .note-bar .when { font-size: 11px; color: var(--muted); flex: 1; }
+  .note-bar .btn:not(.icon) { padding: 6px 10px; font-size: 12px; }
+  .note-bar .counter { flex: 1; }
+  .note > .swatches { margin-top: auto; padding-top: 8px; min-height: 34px; }
+  article.note.pending { opacity: .65; }
+  mark { background: #fbd66d; color: #262b43; border-radius: 3px; }
+  .grid.list { grid-template-columns: 1fr; gap: 12px; }
+  .grid.list .note { min-height: 0; border-radius: 12px; padding: 20px 24px 12px; }
+  .grid.list .note-text { padding-bottom: 12px; }
+  .workspace-footer { margin-top: 32px; color: var(--muted); font-size: 11px; text-align: center; }
+  @keyframes arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (min-width: 1500px) { .app-shell { grid-template-columns: 248px minmax(0, 1fr); } }
+  @media (max-width: 1100px) {
+    .app-shell { grid-template-columns: 190px minmax(0, 1fr); }
+    .sidebar { padding-inline: 14px; }
+    .shortcut { display: none; }
+    .composer-bar { flex-wrap: wrap; }
+    #composer-colors { gap: 6px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+  }
+  @media (max-width: 700px) {
+    .app-shell { display: block; }
+    .sidebar { position: static; height: auto; padding: 18px 20px; flex-direction: row; align-items: center; justify-content: space-between; gap: 16px; border-right: 0; border-bottom: 1px solid var(--border); }
+    .brand { padding: 0; gap: 9px; }
+    .brand-name { font-size: 24px; }
+    .brand-mark { width: 32px; height: 35px; border-radius: 10px 10px 10px 3px; }
+    .workspace-label, .sidebar-tip, .sidebar nav, .powered { display: none; }
+    .sidebar-bottom { margin: 0; padding: 0; max-width: 180px; }
+    .topbar { height: 72px; padding: 0 20px; gap: 12px; }
+    .topbar-label { display: none; }
+    .search-wrap { width: 100%; margin: 0; }
+    main { padding: 30px 20px 36px; }
+    h1 { font-size: 32px; letter-spacing: -1.2px; }
+    .intro { gap: 12px; margin-bottom: 26px; }
+    .intro p { font-size: 13px; max-width: 230px; }
+    .paper-stack { transform: scale(.8); transform-origin: right center; width: 84px; margin-right: 0; }
+    .writing-area { padding: 20px 18px 12px; gap: 10px; }
+    .composer textarea { font-size: 16px; }
+    .composer-bar { padding: 14px 18px; gap: 16px 10px; }
+    #composer-colors { flex-basis: 100%; gap: 9px; }
+    #composer-colors .swatch { width: 19px; height: 19px; }
+    .composer { margin-bottom: 28px; }
+    .sort-label { display: none; }
+    .view-switch { margin-left: auto; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+    article.note { min-height: 180px; }
+    .empty-state { padding: 48px 20px; }
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #191d2b; --surface: #232838; --sidebar: #1f2435;
+      --text: #e4e8f5; --muted: #a5adc5; --border: #343b51;
+      --accent: #a4afff; --accent-soft: #333b64; --accent-text: #1f2440;
+      --yellow: #49432c; --orange: #4a3b2d; --red: #4e3337; --green: #2d4339;
+      --teal: #294346; --blue: #2c3d55; --purple: #3b3553; --pink: #493448;
+      --brown: #413930; --gray: #32394c;
+      --shadow: 0 12px 36px -18px rgb(0 0 0 / 45%);
+    }
+    .btn.primary:hover:not(:disabled) { background: #bac2ff; }
+    article.note { border-color: rgb(228 232 245 / 9%); }
+    .swatch { border-color: rgb(228 232 245 / 25%); }
+    .status.error { background: #452c35; color: #ffb7c1; border-color: #7a4651; }
+    .composer textarea::placeholder { color: var(--muted); }
+    .paper.front span { background: #dcc676; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 5h12M9 12h12M9 19h12M3 5h1M3 12h1M3 19h1"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 11-1l3 3M4 15l3 3a7 7 0 0 0 11-1"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="m15 4 5 5M4 20l5-1L20 8a2 2 0 0 0-5-5L4 14Z"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.6-3.2 1.8 1.8 0 0 1 1.4-2.9h2a3 3 0 0 0 3-3A9 9 0 0 0 12 3Z"/><path d="M7 10h.01M10 6.5h.01M15 7h.01M17.5 11h.01" stroke-width="3"/></symbol>
+  <symbol id="i-delete" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-14M10 10v7M14 10v7"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/></symbol>
+</svg>
+<a class="skip-link" href="#main">Skip to notes</a>
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Workspace navigation">
+    <div>
+      <a class="brand" href="./" aria-label="Notes home">
+        <span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-note"/></svg></span>
+        <span class="brand-name">notes</span>
+      </a>
+      <p class="workspace-label">A little room to think.</p>
+    </div>
+    <nav aria-label="Notes">
+      <a class="nav-item" href="#collection" aria-current="page">
+        <svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg>
+        All notes <span id="count" aria-live="polite">…</span>
+      </a>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="sidebar-tip">
+        <svg class="icon" aria-hidden="true"><use href="#i-spark"/></svg>
+        <p>A color for every thought. Give your notes a little personality.</p>
+      </div>
+      <span class="pill" id="mode" title="Write access needs the site password">Checking access…</span>
+      <p class="powered">A quiet corner, powered by <strong>Jolt</strong></p>
+    </div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <span class="topbar-label">Notes workspace</span>
+      <label class="search-wrap">
+        <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <input id="search" type="search" placeholder="Find a thought…" aria-label="Search notes" autocomplete="off">
+      </label>
+      <button class="btn icon" type="button" id="refresh" aria-label="Refresh notes" title="Refresh notes">
+        <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+      </button>
+    </header>
+    <main id="main" tabindex="-1">
+      <div class="intro">
+        <div>
+          <h1>Your notes</h1>
+          <p>Ideas, reminders, and everything in between.</p>
+        </div>
+        <div class="paper-stack" aria-hidden="true">
+          <div class="paper back"></div><div class="paper middle"></div>
+          <div class="paper front"><span></span><span></span><span></span></div>
+        </div>
+      </div>
+      <form class="composer" id="composer" autocomplete="off">
+        <div class="writing-area">
+          <svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg>
+          <textarea id="new-text" rows="2" maxlength="2000" placeholder="What’s on your mind?" aria-label="New note"></textarea>
+        </div>
+        <div class="composer-bar">
+          <div class="swatches" id="composer-colors" role="radiogroup" aria-label="Note color"></div>
+          <div class="grow"></div>
+          <span class="counter" id="new-counter"></span>
+          <span class="shortcut">Ctrl / ⌘ + Enter</span>
+          <button class="btn primary" type="submit" id="add"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Add note</button>
+        </div>
+      </form>
+      <p class="status" id="status" role="status" aria-live="polite" hidden></p>
+      <section id="collection" aria-labelledby="collection-title">
+        <div class="collection-bar">
+          <h2 id="collection-title">All notes</h2>
+          <span class="sort-label">Recently edited first</span>
+          <div class="view-switch" role="group" aria-label="Note layout">
+            <button class="btn icon" id="view-grid" type="button" aria-label="Grid view" aria-pressed="true" title="Grid view"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></button>
+            <button class="btn icon" id="view-list" type="button" aria-label="List view" aria-pressed="false" title="List view"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg></button>
+          </div>
+        </div>
+        <div class="empty-state" id="empty-state" hidden>
+          <svg class="icon" aria-hidden="true"><use href="#i-note"/></svg>
+          <p class="empty" id="empty">No notes yet.</p>
+        </div>
+        <div class="grid" id="grid"></div>
+      </section>
+      <footer class="workspace-footer">A thought worth keeping starts with a note.</footer>
+    </main>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ── Jolt site data API ──────────────────────────────────────────────────────
+   Docs: docs/jolt-data-api.md. Reads work for anyone who unlocked this site;
+   writes require the site password, entered on Jolt's own form
+   (/_jolt/data/login), which sets a HttpOnly data-admin cookie.            */
+
+const COLLECTION = 'notes';
+const ITEMS_URL = '/_jolt/data/v1/collections/' + COLLECTION + '/items';
+const LOGIN_URL = '/_jolt/data/login';
+const UNLOCK_URL = '/_jolt/unlock';
+
+const MAX_TEXT_CHARS = 2000;
+const MAX_RECORD_BYTES = 65536; // mirrors MAX_RECORD_BYTES in server/utils/site-data.ts
+const PAGE_LIMIT = 100;
+const MAX_RECORDS = 20000; // mirrors MAX_RECORDS in server/utils/site-data.ts; the sample renders every note
+
+const COLORS = ['default', 'yellow', 'orange', 'red', 'green', 'teal', 'blue', 'purple', 'pink', 'brown', 'gray'];
+const COLOR_KEYS = new Set(COLORS);
+const encoder = new TextEncoder();
+
+const state = {
+  items: new Map(),   // id -> { id, value: {text, color}, created_at, updated_at }
+  writable: null,     // null = not probed yet, then true/false
+  editingId: null,
+  pickingId: null,
+  drafts: new Map(),  // id -> draft text while editing
+  query: '',
+  composerColor: 'default',
+  inflight: 0,
+};
+
+const el = {
+  count: document.getElementById('count'),
+  mode: document.getElementById('mode'),
+  search: document.getElementById('search'),
+  refresh: document.getElementById('refresh'),
+  composer: document.getElementById('composer'),
+  newText: document.getElementById('new-text'),
+  newCounter: document.getElementById('new-counter'),
+  add: document.getElementById('add'),
+  composerColors: document.getElementById('composer-colors'),
+  status: document.getElementById('status'),
+  empty: document.getElementById('empty'),
+  grid: document.getElementById('grid'),
+  emptyState: document.getElementById('empty-state'),
+  viewGrid: document.getElementById('view-grid'),
+  viewList: document.getElementById('view-list'),
+};
+
+/* ── helpers ──────────────────────────────────────────────────────────────── */
+
+function noteValue(text, color) {
+  return { text: text, color: COLOR_KEYS.has(color) ? color : 'default' };
+}
+
+function valueBytes(value) {
+  return encoder.encode(JSON.stringify(value)).length;
+}
+
+/** Parses a server record into the shape this app renders; never trusts the payload. */
+function normalize(record) {
+  const value = record && typeof record.value === 'object' && record.value !== null ? record.value : {};
+  return {
+    id: String(record.id),
+    value: noteValue(String(value.text == null ? '' : value.text), value.color),
+    created_at: String(record.created_at || ''),
+    updated_at: String(record.updated_at || record.created_at || ''),
+  };
+}
+
+/**
+ * Single fetch wrapper: always same-origin + credentials, never throws on HTTP
+ * status, returns the parsed body when there is one.
+ */
+async function request(url, options) {
+  const opts = options || {};
+  const headers = { Accept: 'application/json' };
+  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+  let response;
+  try {
+    response = await fetch(url, {
+      method: opts.method || 'GET',
+      headers,
+      body: opts.body,
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+  } catch (error) {
+    return { ok: false, status: 0, offline: true, message: String(error && error.message || error) };
+  }
+  if (response.status === 204) return { ok: true, status: 204, data: null };
+  let data = null;
+  try { data = await response.json(); } catch { /* empty or non-JSON body */ }
+  return {
+    ok: response.ok,
+    status: response.status,
+    data,
+    retryAfter: response.headers.get('Retry-After'),
+    message: data && typeof data.message === 'string' ? data.message : null,
+  };
+}
+
+const STATUS_TEXT = {
+  0: 'Network error — the notes are still on the server. Try Refresh.',
+  400: 'The request was rejected as invalid.',
+  401: 'Sign in with the site password to change notes.',
+  403: 'This session can read the notes but not change them.',
+  404: 'Site data is unavailable — it may be disabled or the site may have expired.',
+  409: 'This site has reached its storage limit, so nothing more can be saved.',
+  413: 'That note is too large (4 KB per note). Shorten it.',
+  429: 'Too many requests — wait a moment and try again.',
+  503: 'Site data is not available on this deployment.',
+};
+
+function describe(result) {
+  if (result.message) return result.message;
+  if (STATUS_TEXT[result.status] !== undefined) return STATUS_TEXT[result.status];
+  return 'Request failed (' + result.status + ').';
+}
+
+/** 401/403 on a write means "no write credential": flip the UI to read-only. */
+function applyAuthFromStatus(status) {
+  if (status === 401 || status === 403) setWritable(false);
+}
+
+function setWritable(writable) {
+  if (state.writable === writable) return;
+  state.writable = writable;
+  el.composer.hidden = !writable;
+  el.mode.className = 'pill ' + (writable ? 'writable' : 'readonly');
+  el.mode.textContent = '';
+  if (writable) {
+    el.mode.append('Editing');
+  } else {
+    el.mode.append('Read-only · ');
+    const link = document.createElement('a');
+    link.href = LOGIN_URL;
+    link.textContent = 'sign in to edit';
+    el.mode.append(link);
+  }
+  render();
+}
+
+let statusTimer = null;
+function setStatus(message, isError) {
+  if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
+  if (!message) { el.status.hidden = true; el.status.textContent = ''; return; }
+  el.status.className = 'status' + (isError ? ' error' : '');
+  el.status.textContent = message;
+  el.status.hidden = false;
+  statusTimer = setTimeout(() => { el.status.hidden = true; }, 8000);
+}
+
+function busy(on) {
+  state.inflight += on ? 1 : -1;
+  const disabled = state.inflight > 0;
+  el.refresh.disabled = disabled;
+  el.add.disabled = disabled || !state.writable;
+}
+
+function relativeTime(iso) {
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return '';
+  const seconds = Math.round((Date.now() - then) / 1000);
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+  if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
+  if (seconds < 86400 * 7) return Math.floor(seconds / 86400) + 'd ago';
+  return new Date(then).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/* ── loading ──────────────────────────────────────────────────────────────── */
+
+async function loadAll() {
+  const items = new Map();
+  let offset = 0;
+  for (;;) {
+    const result = await request(ITEMS_URL + '?limit=' + PAGE_LIMIT + '&offset=' + offset);
+    if (!result.ok) return { error: result };
+    const page = result.data && Array.isArray(result.data.items) ? result.data.items : [];
+    for (const record of page) {
+      if (record && record.id) items.set(String(record.id), normalize(record));
+    }
+    const next = result.data ? result.data.next_offset : null;
+    if (next === null || next === undefined || items.size >= MAX_RECORDS) break;
+    offset = next;
+  }
+  return { items };
+}
+
+/**
+ * Writes need a data-admin cookie that JavaScript cannot read (HttpOnly), so the
+ * page probes with a body the API rejects after the auth check: 400 means the
+ * caller is authorized, 401/403 means it is not. No record is created either way.
+ */
+async function probeWrite() {
+  const result = await request(ITEMS_URL, { method: 'POST', body: '{}' });
+  if (result.status === 400) return true;
+  if (result.status === 401 || result.status === 403) return false;
+  return null;
+}
+
+async function refresh() {
+  busy(true);
+  try {
+    const loaded = await loadAll();
+    if (loaded.error) {
+      applyAuthFromStatus(loaded.error.status);
+      setStatus(loaded.error.status === 401 ? 'Unlock this site to read its notes.' : describe(loaded.error), true);
+      return;
+    }
+    state.items = loaded.items;
+    const writable = await probeWrite();
+    setWritable(writable === true ? true : writable === false ? false : state.writable);
+    setStatus('');
+    render();
+  } finally {
+    busy(false);
+  }
+}
+
+/* ── mutations ────────────────────────────────────────────────────────────── */
+
+async function addNote(text, color) {
+  const value = noteValue(text, color);
+  const tooLong = sizeProblem(value);
+  if (tooLong) { setStatus(tooLong, true); return false; }
+  busy(true);
+  try {
+    const result = await request(ITEMS_URL, { method: 'POST', body: JSON.stringify({ value }) });
+    if (!result.ok) {
+      applyAuthFromStatus(result.status);
+      setStatus(describe(result), true);
+      return false;
+    }
+    setWritable(true);
+    const saved = normalize(result.data);
+    state.items.set(saved.id, saved);
+    setStatus('');
+    render();
+    return true;
+  } finally {
+    busy(false);
+  }
+}
+
+function sizeProblem(value) {
+  if (valueBytes(value) > MAX_RECORD_BYTES) {
+    return 'That note is ' + valueBytes(value) + ' bytes; the limit is ' + MAX_RECORD_BYTES + '. Shorten it.';
+  }
+  return null;
+}
+
+async function saveNote(id, value) {
+  const problem = sizeProblem(value);
+  if (problem) { setStatus(problem, true); return false; }
+  busy(true);
+  try {
+    const result = await request(ITEMS_URL + '/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      body: JSON.stringify({ value }),
+    });
+    if (!result.ok) {
+      applyAuthFromStatus(result.status);
+      setStatus(describe(result), true);
+      return false;
+    }
+    state.items.set(id, normalize(result.data));
+    setStatus('');
+    render();
+    return true;
+  } finally {
+    busy(false);
+  }
+}
+
+async function deleteNote(id) {
+  const previous = state.items.get(id);
+  state.items.delete(id);
+  state.drafts.delete(id);
+  if (state.editingId === id) state.editingId = null;
+  render();
+  busy(true);
+  try {
+    const result = await request(ITEMS_URL + '/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (!result.ok) {
+      if (previous) state.items.set(id, previous);
+      applyAuthFromStatus(result.status);
+      setStatus(describe(result), true);
+      render();
+      return;
+    }
+    setStatus('');
+  } finally {
+    busy(false);
+  }
+}
+
+/* ── rendering ────────────────────────────────────────────────────────────── */
+
+function visibleNotes() {
+  const query = state.query.trim().toLowerCase();
+  const notes = [...state.items.values()].filter((note) => (
+    query === '' || note.value.text.toLowerCase().includes(query)
+  ));
+  notes.sort((a, b) => {
+    const byUpdated = Date.parse(b.updated_at) - Date.parse(a.updated_at);
+    if (byUpdated !== 0 && !Number.isNaN(byUpdated)) return byUpdated;
+    return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+  });
+  return notes;
+}
+function makeIcon(name) {
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.classList.add('icon');
+  icon.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', '#i-' + name);
+  icon.append(use);
+  return icon;
+}
+
+
+function makeSwatches(selected, onPick) {
+  const group = document.createElement('div');
+  group.className = 'swatches';
+  group.setAttribute('role', 'radiogroup');
+  group.setAttribute('aria-label', 'Note color');
+  for (const color of COLORS) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'swatch';
+    button.dataset.color = color;
+    button.setAttribute('role', 'radio');
+    button.setAttribute('aria-checked', color === selected ? 'true' : 'false');
+    button.setAttribute('aria-label', color);
+    button.title = color;
+    button.addEventListener('click', () => onPick(color));
+    group.append(button);
+  }
+  return group;
+}
+
+function makeNoteCard(note) {
+  const card = document.createElement('article');
+  card.className = 'note';
+  card.dataset.color = note.value.color;
+  if (state.inflight > 0) card.classList.add('pending');
+
+  const editing = state.editingId === note.id;
+  let textarea = null;
+
+  if (editing) {
+    textarea = document.createElement('textarea');
+    textarea.className = 'note-edit';
+    textarea.maxLength = MAX_TEXT_CHARS;
+    textarea.value = state.drafts.has(note.id) ? state.drafts.get(note.id) : note.value.text;
+    textarea.setAttribute('aria-label', 'Edit note');
+    const size = document.createElement('span');
+    size.className = 'counter';
+    const updateSize = () => {
+      state.drafts.set(note.id, textarea.value);
+      const bytes = valueBytes(noteValue(textarea.value, note.value.color));
+      size.textContent = bytes + ' / ' + MAX_RECORD_BYTES + ' B';
+      size.classList.toggle('over', bytes > MAX_RECORD_BYTES);
+    };
+    textarea.addEventListener('input', updateSize);
+    textarea.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); cancelEdit(note.id); }
+      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); commitEdit(note.id, textarea); }
+    });
+    updateSize();
+    card.append(textarea);
+
+    const bar = document.createElement('div');
+    bar.className = 'note-bar';
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.className = 'btn primary';
+    save.textContent = 'Save';
+    save.addEventListener('click', () => commitEdit(note.id, textarea));
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'btn';
+    cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', () => cancelEdit(note.id));
+    bar.append(size, save, cancel);
+    card.append(bar);
+    queueMicrotask(() => textarea.focus());
+    return card;
+  }
+
+  const body = document.createElement('div');
+  body.className = 'note-text';
+  const query = state.query.trim().toLowerCase();
+  const text = note.value.text;
+  if (query === '') {
+    body.textContent = text;
+  } else {
+    // Highlight matches without innerHTML: build text nodes around <mark>.
+    let cursor = 0;
+    for (;;) {
+      const index = text.toLowerCase().indexOf(query, cursor);
+      if (index === -1) { body.append(text.slice(cursor)); break; }
+      body.append(text.slice(cursor, index));
+      const mark = document.createElement('mark');
+      mark.textContent = text.slice(index, index + query.length);
+      body.append(mark);
+      cursor = index + query.length;
+    }
+  }
+  card.append(body);
+
+  const bar = document.createElement('div');
+  bar.className = 'note-bar';
+  const when = document.createElement('span');
+  when.className = 'when';
+  when.textContent = relativeTime(note.updated_at);
+  bar.append(when);
+
+  if (state.writable) {
+    const palette = document.createElement('button');
+    palette.type = 'button';
+    palette.className = 'btn icon';
+    palette.append(makeIcon('palette'));
+    palette.title = 'Change color';
+    palette.setAttribute('aria-label', 'Change color');
+    palette.addEventListener('click', () => {
+      state.pickingId = state.pickingId === note.id ? null : note.id;
+      render();
+    });
+
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'btn icon';
+    edit.append(makeIcon('edit'));
+    edit.title = 'Edit note';
+    edit.setAttribute('aria-label', 'Edit note');
+    edit.addEventListener('click', () => {
+      state.editingId = note.id;
+      state.drafts.delete(note.id);
+      render();
+    });
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn icon';
+    remove.append(makeIcon('delete'));
+    remove.title = 'Delete note';
+    remove.setAttribute('aria-label', 'Delete note');
+    remove.addEventListener('click', () => deleteNote(note.id));
+
+    bar.append(palette, edit, remove);
+  }
+
+  if (state.pickingId === note.id) {
+    bar.hidden = true;
+    const picker = makeSwatches(note.value.color, (color) => {
+      state.pickingId = null;
+      if (color === note.value.color) { render(); return; }
+      saveNote(note.id, noteValue(note.value.text, color));
+    });
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'btn icon';
+    close.append(makeIcon('close'));
+    close.title = 'Close colors';
+    close.setAttribute('aria-label', 'Close colors');
+    close.addEventListener('click', () => { state.pickingId = null; render(); });
+    picker.append(close);
+    card.append(bar, picker);
+    return card;
+  }
+  card.append(bar);
+  return card;
+}
+
+async function commitEdit(id, textarea) {
+  const note = state.items.get(id);
+  if (!note) { cancelEdit(id); return; }
+  const text = textarea.value;
+  state.editingId = null;
+  state.drafts.delete(id);
+  if (text === note.value.text) { render(); return; }
+  const saved = await saveNote(id, noteValue(text, note.value.color));
+  if (!saved) render();
+}
+
+function cancelEdit(id) {
+  state.editingId = null;
+  state.drafts.delete(id);
+  render();
+}
+
+let renderQueued = false;
+function render() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => {
+    renderQueued = false;
+    const notes = visibleNotes();
+    el.grid.replaceChildren(...notes.map(makeNoteCard));
+    const filtered = state.query.trim() !== '';
+    el.emptyState.hidden = notes.length > 0;
+    el.empty.textContent = filtered
+      ? 'No notes match “' + state.query.trim() + '”.'
+      : state.writable ? 'No notes yet — add your first one above.' : 'No notes yet.';
+    el.count.textContent = filtered
+      ? notes.length + ' of ' + state.items.size
+      : state.items.size === 1 ? '1 note' : state.items.size + ' notes';
+    el.add.disabled = state.inflight > 0 || !state.writable;
+  });
+}
+
+/* ── wiring ───────────────────────────────────────────────────────────────── */
+
+function renderComposerColor() {
+  const group = makeSwatches(state.composerColor, (color) => {
+    state.composerColor = color;
+    renderComposerColor();
+  });
+  el.composerColors.replaceChildren(...group.children);
+  el.composer.style.setProperty('--capture-color', state.composerColor === 'default' ? 'var(--surface)' : 'var(--' + state.composerColor + ')');
+  updateNewCounter();
+}
+
+function updateNewCounter() {
+  const bytes = valueBytes(noteValue(el.newText.value, state.composerColor));
+  el.newCounter.textContent = bytes + ' / ' + MAX_RECORD_BYTES + ' B';
+  el.newCounter.classList.toggle('over', bytes > MAX_RECORD_BYTES);
+}
+
+el.newText.addEventListener('input', () => {
+  el.newText.style.height = 'auto';
+  el.newText.style.height = Math.min(el.newText.scrollHeight, 384) + 'px';
+  updateNewCounter();
+});
+el.newText.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+    event.preventDefault();
+    el.composer.requestSubmit();
+  }
+});
+
+el.composer.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const text = el.newText.value;
+  if (text.trim() === '') return;
+  const color = state.composerColor;
+  const added = await addNote(text, color);
+  if (!added) return;
+  el.newText.value = '';
+  el.newText.style.height = 'auto';
+  state.composerColor = 'default';
+  renderComposerColor();
+  updateNewCounter();
+  el.newText.focus();
+});
+
+let searchTimer = null;
+el.search.addEventListener('input', () => {
+  if (searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { state.query = el.search.value; render(); }, 120);
+});
+
+let layoutAnimation = null;
+function setLayout(list) {
+  if (el.grid.classList.contains('list') === list) return;
+  if (layoutAnimation) layoutAnimation.cancel();
+  el.grid.classList.toggle('list', list);
+  el.viewGrid.setAttribute('aria-pressed', String(!list));
+  el.viewList.setAttribute('aria-pressed', String(list));
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    layoutAnimation = el.grid.animate(
+      [{ opacity: .45 }, { opacity: 1 }],
+      { duration: 240, easing: 'ease-out' }
+    );
+  }
+}
+el.viewGrid.addEventListener('click', () => setLayout(false));
+el.viewList.addEventListener('click', () => setLayout(true));
+
+el.refresh.addEventListener('click', () => refresh());
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && state.editingId === null && state.drafts.size === 0) refresh();
+});
+
+renderComposerColor();
+updateNewCounter();
+setWritable(false);
+el.composer.hidden = true;
+refresh();
+</script>
+</body>
+</html>
