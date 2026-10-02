@@ -235,6 +235,41 @@ describe('POST /api/ai/chat availability and authentication', () => {
     expect(noOrigin.status).toBe(403)
     expect(provider.requests).toHaveLength(0)
   })
+
+  it('accepts a direct localhost app on another development port but rejects hosted site subdomains', async () => {
+    const userId = createUser()
+    const { provider, origin } = await serveChat(sendManifest(LANDING_MANIFEST))
+    const cookie = session(userId)
+
+    const hostedSite = await postChat(origin, { message: 'hi', revision: 0 }, {
+      cookie,
+      origin: 'http://untrusted.sites.localhost:49152',
+    })
+    const localApp = await postChat(origin, { message: 'hi', revision: 0 }, {
+      cookie,
+      origin: 'http://localhost:49152',
+    })
+
+    expect(hostedSite.status).toBe(403)
+    expect((await hostedSite.json()).error.code).toBe('origin_mismatch')
+    expect(localApp.status).toBe(200)
+    expect(provider.requests).toHaveLength(1)
+  })
+
+  it('keeps the configured application origin exact in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const userId = createUser()
+    const { provider, origin } = await serveChat(sendManifest(LANDING_MANIFEST))
+
+    const response = await postChat(origin, { message: 'hi', revision: 0 }, {
+      cookie: session(userId),
+      origin: 'http://localhost:49152',
+    })
+
+    expect(response.status).toBe(403)
+    expect((await response.json()).error.code).toBe('origin_mismatch')
+    expect(provider.requests).toHaveLength(0)
+  })
 })
 
 describe('POST /api/ai/chat request bounds', () => {

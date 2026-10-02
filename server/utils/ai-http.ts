@@ -4,18 +4,20 @@
  * Every AI route answers JSON and nothing else, checks availability before auth
  * or body parsing, resolves the workspace owner solely from the signed-in
  * account cookie plus a live user row, and refuses cross-origin mutations with
- * the existing exact-origin check against the configured application origin.
+ * the configured application origin. Development additionally permits direct
+ * loopback app origins on another port, never hosted-site subdomains.
  * Responses are never cacheable and never carry provider bodies, keys, absolute
  * paths, stack traces, or prompts.
  */
 
-import { setHeader, setResponseStatus, createError } from 'h3'
+import { getRequestHeader, setHeader, setResponseStatus, createError } from 'h3'
 import type { H3Event } from 'h3'
 import { resolveAiConfig, type AiProviderConfig } from '~/server/utils/ai-builder'
 import { DEFAULT_ENTRY_FILE, describeWorkspace, WorkspaceError, type WorkspaceFile } from '~/server/utils/ai-workspace'
 import { findUploadBySlug, findUserById, type AiWorkspaceRow, type UploadRow } from '~/server/utils/db'
 import { canonicalSiteUrl, getSiteHostConfig, requireExactOrigin } from '~/server/utils/site-host'
 import { isAdminAuthenticated } from '~/server/utils/admin-auth'
+import { isProductionRuntime } from '~/server/utils/runtime-mode'
 import { getUserIdFromEvent } from '~/server/utils/user-auth'
 
 /** Machine-readable code returned in every AI error body. */
@@ -143,13 +145,28 @@ export function requireAiUser(event: H3Event): string {
   return userId
 }
 
-/** Mutations must come from the application origin; GETs never call this. */
+/** Only direct loopback app origins are accepted in development. Never allow `.localhost` hosted sites. */
+function isDevelopmentLoopbackAppOrigin(event: H3Event): boolean {
+  if (isProductionRuntime()) return false
+  const raw = getRequestHeader(event, 'origin')
+  if (!raw) return false
+  try {
+    const origin = new URL(raw)
+    if (origin.origin !== raw || (origin.protocol !== 'http:' && origin.protocol !== 'https:')) return false
+    return origin.hostname === 'localhost' || origin.hostname === '127.0.0.1' || origin.hostname === '[::1]'
+  } catch {
+    return false
+  }
+}
+
+/** Mutations must come from the application origin; direct loopback apps may use a different dev port. */
 export function requireAiOrigin(event: H3Event): void {
   const origin = getSiteHostConfig().app?.origin
   if (!origin) throw aiError(403, 'origin_mismatch', 'The application origin is not configured.')
   try {
     requireExactOrigin(event, origin)
   } catch {
+    if (isDevelopmentLoopbackAppOrigin(event)) return
     throw aiError(403, 'origin_mismatch', 'The request did not come from the application origin.')
   }
 }
