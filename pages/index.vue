@@ -8,37 +8,17 @@ const logoUrl = joinURL(useRuntimeConfig().app.baseURL, 'JoltSlashLogo.png')
 const { user, isLoggedIn, refresh } = useCurrentUser()
 const showUploader = computed(() => landingPageEnabled.value || isLoggedIn.value)
 
-// The Build tab exists only when the server has a usable AI configuration. Its
-// query parameter preselects the tab; it never grants any authorization.
-type LandingTab = 'upload' | 'build'
+// The Builder Studio link exists only when the server has a usable AI
+// configuration; it navigates to `/build`, which enforces account access.
 const aiBuilderAvailable = computed(() => siteConfig.value?.aiBuilderAvailable === true && (!user.value || !!user.value.ai_build_enabled))
-const route = useRoute()
-const activeTab = ref<LandingTab>(route.query.tab === 'build' && aiBuilderAvailable.value ? 'build' : 'upload')
-// `?edit=<slug>` only identifies a site to confirm; it grants no authorization.
-const editSlug = computed(() => (typeof route.query.edit === 'string' && route.query.edit ? route.query.edit : null))
 
-// The builder always needs a signed-in account, so the Build tab resolves the
+// The builder always needs a signed-in account, so the landing page resolves the
 // current user even in open publishing mode where the upload form does not.
 if (
   !isLoggedIn.value &&
   ((landingPageEnabled.value && siteConfig.value?.registeredUsersOnly) ||
     siteConfig.value?.aiBuilderAvailable === true)
 ) await refresh()
-
-watch(() => route.query.tab, (tab) => {
-  if (tab === 'build' && aiBuilderAvailable.value) {
-    activeTab.value = 'build'
-    if (!isLoggedIn.value) refresh()
-  }
-})
-
-function selectTab(tab: LandingTab) {
-  if (tab === 'build' && !aiBuilderAvailable.value) return
-  // The upload widget lives in the Upload panel; drop it before it unmounts.
-  if (tab === 'build' && activeTab.value === 'upload') cleanupTurnstile()
-  activeTab.value = tab
-  if (tab === 'build' && !isLoggedIn.value) refresh()
-}
 
 useSeoMeta({
   title: computed(() => showUploader.value ? 'Upload a Static Site' : 'Jolt Host'),
@@ -284,40 +264,12 @@ const boxPowered = ref(false)
       </div><!-- .hero-left -->
       <div class="hero-right">
         <div ref="boxRef" class="box" :class="{ 'box-powered': boxPowered }">
-          <div v-if="aiBuilderAvailable" class="box-tabs" role="tablist" aria-label="Choose how to publish">
-            <button
-              id="tab-upload"
-              type="button"
-              role="tab"
-              class="box-tab"
-              :class="{ active: activeTab === 'upload' }"
-              :aria-selected="activeTab === 'upload'"
-              aria-controls="panel-upload"
-              @click="selectTab('upload')"
-            >Upload</button>
-            <button
-              id="tab-build"
-              type="button"
-              role="tab"
-              class="box-tab"
-              :class="{ active: activeTab === 'build' }"
-              :aria-selected="activeTab === 'build'"
-              aria-controls="panel-build"
-              @click="selectTab('build')"
-            >Build</button>
+          <div v-if="aiBuilderAvailable" class="box-ai">
+            <NuxtLink to="/build" class="box-ai-link">Build a site with AI</NuxtLink>
           </div>
-          <h2 class="title">{{ activeTab === 'build' ? 'Build a site with AI' : 'Upload a static site' }}</h2>
+          <h2 class="title">Upload a static site</h2>
 
-      <div v-if="activeTab === 'build'" id="panel-build" role="tabpanel" aria-labelledby="tab-build">
-        <div v-if="!isLoggedIn" class="login-notice">
-          <p>Sign in to use AI Builder.</p>
-          <NuxtLink to="/login">Log in</NuxtLink>
-          <NuxtLink v-if="siteConfig?.registrationEnabled" to="/register">Create an account</NuxtLink>
-        </div>
-        <AiBuilder v-else :edit-slug="editSlug" />
-      </div>
-
-      <div v-else id="panel-upload" role="tabpanel" aria-labelledby="tab-upload">
+      <div id="panel-upload">
       <div v-if="loginRequired" class="login-notice">
         <p>Log in to publish a static site.</p>
         <NuxtLink to="/login">Log in</NuxtLink>
@@ -634,37 +586,27 @@ select#expiration option {
   border-radius: 16px;
   text-align: center;
 }
-.box-tabs {
+.box-ai {
   display: flex;
-  gap: 0.25rem;
-  margin-bottom: 1rem;
-  padding: 0.25rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  justify-content: center;
+  margin-bottom: 0.9rem;
 }
-.box-tab {
-  flex: 1;
-  padding: 0.4rem 0.75rem;
-  font: inherit;
-  font-size: 0.875rem;
+.box-ai-link {
+  font-size: 0.85rem;
   font-weight: 600;
-  color: #a1a1aa;
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: color 0.2s, background 0.2s;
+  color: #c4b5fd;
+  text-decoration: none;
+  padding: 0.35rem 0.85rem;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  border-radius: 999px;
+  background: rgba(167, 139, 250, 0.12);
+  transition: background 0.2s, border-color 0.2s;
 }
-.box-tab:hover:not(.active) {
-  color: #e4e4e7;
-  background: rgba(255, 255, 255, 0.04);
+.box-ai-link:hover {
+  background: rgba(167, 139, 250, 0.22);
+  border-color: rgba(167, 139, 250, 0.55);
 }
-.box-tab.active {
-  color: #fde047;
-  background: rgba(253, 224, 71, 0.12);
-}
-.box-tab:focus-visible {
+.box-ai-link:focus-visible {
   outline: 2px solid rgba(167, 139, 250, 0.6);
   outline-offset: 2px;
 }

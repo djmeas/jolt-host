@@ -492,7 +492,7 @@ onMounted(() => {
     <div class="dashboard">
       <div class="header">
         <h1 class="title">Dashboard</h1>
-        <NuxtLink v-if="aiBuilderAvailable" to="/?tab=build" class="header-ai-link">AI Builder</NuxtLink>
+        <NuxtLink v-if="aiBuilderAvailable" to="/build" class="header-ai-link">AI Builder</NuxtLink>
         <span v-if="isAdmin" class="header-user">Admin</span>
         <span v-else-if="user" class="header-user">{{ user.name }}</span>
       </div>
@@ -690,7 +690,7 @@ onMounted(() => {
                             <button type="button" class="menu-item" @click="goToUpdate(u.slug)">Replace files</button>
                             <NuxtLink
                               v-if="aiBuilderAvailable && u.ai_editable"
-                              :to="`/?tab=build&edit=${encodeURIComponent(u.slug)}`"
+                              :to="`/build?edit=${encodeURIComponent(u.slug)}`"
                               class="menu-item menu-item-link"
                               @click="closeMenu()"
                             >
