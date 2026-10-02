@@ -213,6 +213,7 @@ type UserRow = {
   email: string
   upload_max_bytes: number | null
   never_expire: number
+  ai_build_enabled: number
   created_at: string
 }
 
@@ -237,6 +238,69 @@ const usersLimit = computed(() => usersData.value?.limit ?? 20)
 const usersStartItem = computed(() => (usersCurrentPage.value - 1) * usersLimit.value + 1)
 const usersEndItem = computed(() => Math.min(usersCurrentPage.value * usersLimit.value, usersTotal.value))
 
+const buildTogglePending = ref(new Set<string>())
+const buildToggleError = ref<string | null>(null)
+
+async function toggleBuildMode(u: UserRow) {
+  if (buildTogglePending.value.has(u.id)) return
+  buildTogglePending.value.add(u.id)
+  buildToggleError.value = null
+  try {
+    const updated = await $fetch<UserRow>(`/api/admin/users/${u.id}`, {
+      method: 'PATCH', body: { ai_build_enabled: !u.ai_build_enabled },
+    })
+    Object.assign(u, updated)
+  } catch {
+    buildToggleError.value = 'Failed to update Build Mode. Try again.'
+  } finally {
+    buildTogglePending.value.delete(u.id)
+  }
+}
+
+type AiSettings = {
+  available: boolean
+  source: 'admin' | 'env' | 'none'
+  base_url: string | null
+  model: string | null
+  has_key: boolean
+  key_hint: string | null
+  ai_build_enabled_global: boolean
+}
+const { data: aiSettings, error: aiSettingsLoadError } = await useFetch<AiSettings>('/api/admin/ai/settings')
+const aiBaseUrl = ref(aiSettings.value?.base_url ?? '')
+const aiModel = ref(aiSettings.value?.model ?? '')
+const aiKey = ref('')
+const aiClearKey = ref(false)
+const aiSaving = ref(false)
+const aiSaveError = ref<string | null>(null)
+const aiSaved = ref(false)
+
+async function saveAiSettings() {
+  aiSaving.value = true
+  aiSaveError.value = null
+  aiSaved.value = false
+  try {
+    aiSettings.value = await $fetch<AiSettings>('/api/admin/ai/settings', {
+      method: 'PUT',
+      body: {
+        base_url: aiBaseUrl.value,
+        model: aiModel.value,
+        api_key: aiClearKey.value ? '' : aiKey.value || undefined,
+      },
+    })
+    aiBaseUrl.value = aiSettings.value.base_url ?? ''
+    aiModel.value = aiSettings.value.model ?? ''
+    aiKey.value = ''
+    aiClearKey.value = false
+    aiSaved.value = true
+  } catch (e: unknown) {
+    const err = e as { data?: { message?: string } }
+    aiSaveError.value = err.data?.message ?? 'Failed to save AI settings. Try again.'
+  } finally {
+    aiSaving.value = false
+  }
+}
+
 function goToUsersPage(p: number) {
   usersPage.value = Math.max(1, Math.min(p, usersTotalPages.value))
 }
@@ -248,6 +312,7 @@ const addUserEmail = ref('')
 const addUserPassword = ref('')
 const addUserMaxMb = ref('')
 const addUserNeverExpire = ref(false)
+const addUserBuildEnabled = ref(false)
 const addUserLoading = ref(false)
 const addUserError = ref<string | null>(null)
 
@@ -261,6 +326,7 @@ async function createUser() {
       email: addUserEmail.value.trim(),
       password: addUserPassword.value,
       never_expire: addUserNeverExpire.value ? 1 : 0,
+      ai_build_enabled: addUserBuildEnabled.value,
     }
     if (addUserMaxMb.value.trim()) {
       body.upload_max_bytes = Math.round(parseFloat(addUserMaxMb.value) * 1024 * 1024)
@@ -271,6 +337,7 @@ async function createUser() {
     addUserPassword.value = ''
     addUserMaxMb.value = ''
     addUserNeverExpire.value = false
+    addUserBuildEnabled.value = false
     showAddUser.value = false
     await refreshUsers()
   } catch (e: unknown) {
@@ -365,7 +432,7 @@ async function deleteUser(id: string, name: string) {
   }
 }
 
-const activeTab = ref<'uploads' | 'tokens' | 'users'>('uploads')
+const activeTab = ref<'uploads' | 'tokens' | 'users' | 'ai'>('uploads')
 
 const openMenuId = ref<string | null>(null)
 const menuPosition = ref<{ top: number, left: number } | null>(null)
@@ -414,7 +481,49 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
         <button type="button" class="tab-btn" :class="{ active: activeTab === 'users' }" @click="activeTab = 'users'">
           Users
         </button>
+        <button type="button" class="tab-btn" :class="{ active: activeTab === 'ai' }" @click="activeTab = 'ai'">
+          AI
+        </button>
       </div>
+
+      <section v-if="activeTab === 'ai'" class="section">
+        <p class="section-desc">Configure the server's OpenAI-compatible provider. Enable Build Mode for individual accounts in Users.</p>
+        <p v-if="aiSettings" class="section-desc" role="status">
+          {{ aiSettings.available ? 'Available' : 'Unavailable' }} · Source: {{ aiSettings.source }}
+          <span v-if="!aiSettings.ai_build_enabled_global"> · Disabled by ENABLE_AI_BUILDER</span>
+        </p>
+        <p v-if="aiSettingsLoadError" class="token-error">Failed to load AI settings. Reload before editing.</p>
+        <form v-else class="ai-settings-form" @submit.prevent="saveAiSettings">
+          <label class="ai-settings-field" for="ai-base-url">
+            Base URL
+            <input id="ai-base-url" v-model="aiBaseUrl" type="text" class="token-nickname-input" placeholder="https://provider.example/v1" :disabled="aiSaving" />
+          </label>
+          <label class="ai-settings-field" for="ai-api-key">
+            API key — {{ aiSettings?.has_key ? 'configured' : 'not set' }}
+            <input id="ai-api-key" v-model="aiKey" type="password" autocomplete="new-password" class="token-nickname-input" :placeholder="aiSettings?.key_hint ? `Configured, ends in ${aiSettings.key_hint}` : 'Enter provider key'" :disabled="aiSaving || aiClearKey" />
+          </label>
+          <label class="checkbox-label">
+            <input v-model="aiClearKey" type="checkbox" :disabled="aiSaving" />
+            Clear stored key (use environment fallback)
+          </label>
+          <label class="ai-settings-field" for="ai-model">
+            Model
+            <input id="ai-model" v-model="aiModel" type="text" list="ai-models" maxlength="200" class="token-nickname-input" placeholder="Provider model identifier" :disabled="aiSaving" />
+            <datalist id="ai-models">
+              <option value="gpt-4.1" />
+              <option value="gpt-4.1-mini" />
+              <option value="gpt-5" />
+              <option value="claude-sonnet-4-5" />
+              <option value="gemini-2.5-pro" />
+              <option value="opencode/big-pickle" />
+            </datalist>
+          </label>
+          <p class="section-desc">Leave the key blank to keep it unchanged. Empty Base URL or Model removes that admin override and uses the environment value. Model suggestions must be supported by your provider.</p>
+          <button type="submit" class="create-token-btn" :disabled="aiSaving">{{ aiSaving ? 'Saving…' : 'Save settings' }}</button>
+          <p v-if="aiSaved" class="section-desc" role="status">AI settings saved.</p>
+          <p v-if="aiSaveError" class="token-error" role="alert">{{ aiSaveError }}</p>
+        </form>
+      </section>
 
       <!-- Uploads tab -->
       <section v-if="activeTab === 'uploads'" class="section">
@@ -574,6 +683,10 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
               <input v-model="addUserNeverExpire" type="checkbox" :disabled="addUserLoading" />
               Never expire
             </label>
+            <label class="checkbox-label">
+              <input v-model="addUserBuildEnabled" type="checkbox" :disabled="addUserLoading" />
+              Enable Build Mode
+            </label>
             <button
               type="button"
               class="create-token-btn"
@@ -586,6 +699,7 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
           <p v-if="addUserError" class="token-error">{{ addUserError }}</p>
         </div>
 
+        <p v-if="buildToggleError" class="token-error" role="alert">{{ buildToggleError }}</p>
         <div v-if="!pendingUsers && users.length === 0 && usersData" class="token-empty muted">No users yet.</div>
 
         <div v-else-if="users.length > 0">
@@ -607,6 +721,7 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
                   <th>Email</th>
                   <th>Upload Limit</th>
                   <th>Never Expire</th>
+                  <th>Build Mode</th>
                   <th>Created</th>
                   <th class="col-actions">Actions</th>
                 </tr>
@@ -620,6 +735,11 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
                     <td class="muted">{{ u.upload_max_bytes ? `${Math.round(u.upload_max_bytes / 1024 / 1024)} MB` : 'Default' }}</td>
                     <td>
                       <span :class="['badge', u.never_expire ? 'badge-yes' : 'badge-no']">{{ u.never_expire ? 'Yes' : 'No' }}</span>
+                    </td>
+                    <td>
+                      <button type="button" :class="['badge', 'build-toggle', u.ai_build_enabled ? 'badge-yes' : 'badge-no']" :aria-pressed="!!u.ai_build_enabled" :aria-label="`Build Mode for ${u.name}: ${u.ai_build_enabled ? 'Enabled' : 'Disabled'}`" :disabled="buildTogglePending.has(u.id)" @click="toggleBuildMode(u)">
+                        {{ u.ai_build_enabled ? 'Enabled' : 'Disabled' }}
+                      </button>
                     </td>
                     <td class="muted">{{ formatDate(u.created_at) }}</td>
                     <td class="col-actions">
@@ -637,7 +757,7 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
                   </tr>
                   <!-- Edit expansion row -->
                   <tr v-if="editingUserId === u.id" class="expansion-row">
-                    <td colspan="6">
+                    <td colspan="7">
                       <div class="expansion-form">
                         <div class="expansion-fields">
                           <div class="expansion-field">
@@ -670,7 +790,7 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
                   </tr>
                   <!-- Reset password expansion row -->
                   <tr v-if="resetPasswordUserId === u.id" class="expansion-row">
-                    <td colspan="6">
+                    <td colspan="7">
                       <div class="expansion-form">
                         <div class="expansion-fields">
                           <div class="expansion-field">
@@ -1433,4 +1553,11 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
   opacity: 0.5;
   cursor: not-allowed;
 }
+.ai-settings-form { display: grid; gap: 1rem; max-width: 620px; }
+.ai-settings-field { display: grid; gap: 0.5rem; color: #a1a1aa; font-size: 0.9rem; }
+.ai-settings-field .token-nickname-input { width: 100%; box-sizing: border-box; }
+.ai-settings-form .create-token-btn { justify-self: start; }
+.build-toggle { cursor: pointer; font: inherit; border: 1px solid currentColor; white-space: nowrap; }
+.build-toggle:disabled { cursor: wait; opacity: 0.5; }
+.build-toggle:focus-visible { outline: 2px solid #c4b5fd; outline-offset: 3px; }
 </style>

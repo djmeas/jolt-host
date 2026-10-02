@@ -42,6 +42,39 @@ Go to **Paste Markdown** to write or paste Markdown. Jolt Host converts it to a 
 
 ---
 
+## AI Builder (optional)
+
+If the operator has configured it, the home page shows an **Upload | Build** tab strip on the upload box. The **Build** tab lets you describe a static site in plain text and have a configured model write the files for a private, account-only workspace:
+
+1. Sign in (the builder always needs a registered account, even where anonymous uploads are allowed).
+2. Describe the site, e.g. "a one-page portfolio with a dark theme and a contact section", and send.
+3. Read the reply summary and open any generated text file to inspect it. Follow-up messages patch the same workspace.
+4. Click **Preview** to publish the current files as a real, brand-new site you own. Each Preview creates a separate upload with its own link; the workspace stays private and is not attached to it. Continue iterating and Preview again whenever you like.
+
+The result page and dashboard work exactly like an ordinary upload.
+
+### Edit an existing upload
+
+If a site in your dashboard is eligible (owned, not anonymous, not expired), its row menu shows **Edit with AI**. That opens the Build tab with the site preselected; confirm **Attach** to load its live files into your workspace. Attaching replaces your current draft and chat session, so save anything you still need first.
+
+1. **Attach** copies the site's served files into the workspace. Text files (`.html`, `.css`, `.js`, `.md`, `.txt`, `.svg`, `.json`) become editable; images and other binary files are kept as read-only **opaque assets**. Opaque bytes are never sent to the model and cannot be changed or deleted by it, but they are carried through every turn and republished with the site.
+2. Describe your change and send. Patches update only editable text.
+3. Click **Publish changes** to replace the site's files through the ordinary replacement pipeline. The site keeps the **same URL, slug, password, expiration, and Data API settings**, and no new dashboard entry is created. Publishing sends only your editable text plus the retained assets; the model never sees the binaries.
+4. **Restore previous version** brings back the site's bytes from the moment you attached it — into your local draft only. Nothing changes on the live site until you publish again. If someone replaced the site elsewhere after you attached it, publishing returns a conflict (`409`) and you must attach again rather than overwrite their change.
+5. **Start a new site** discards the attachment and returns to new-site mode (your previous messages stay in the account's cost history, but are excluded from the new session).
+
+Attaching is refused when the site's editable text exceeds the workspace caps (50 files, 1 MiB per file, 5 MiB total). Only the site's owner, or a registered account with an admin session, can attach it; anonymous owner-token sites are excluded.
+
+**Operator notes**
+
+- **Enable it** by setting `JOLT_AI_API_KEY`, `JOLT_AI_BASE_URL` (an absolute HTTPS OpenAI-compatible base ending in `/v1`, e.g. your gateway URL), and `JOLT_AI_MODEL`. `ENABLE_AI_BUILDER=false` kills the feature. With any value missing the feature fails closed: the Build tab and dashboard link stay hidden and `/api/ai/**` returns `503`. The gateway must accept the fixed request shape (`stream: false`, `n: 1`, `max_tokens: 32768`, one `finish_reason: "stop"` completion); Jolt never falls back to another model.
+- **What leaves the server** — the user's message and the current editable file contents are sent to that endpoint for each turn. The key stays server-side and never appears in responses, logs, prompts, or transcripts. Generated sites are still untrusted content served only from the isolated hosted origin.
+- **Storage** — one workspace per account at `./storage/.workspaces/<user-id>/`, private and never served. It persists across logins and restarts; upload/TTL cleanup never removes it. Deleting the account removes its AI rows and workspace. Back up the SQLite `ai_workspaces`/`ai_messages` tables together with that directory to keep transcripts and generated files consistent.
+- **Caps and cost** — at most 50 editable files, 1 MiB per file, and 5 MiB of generated text per workspace (private generation/metadata storage is separate, so the disk footprint can be larger). Each model call stores its model, provider-reported token counts, and duration in `ai_messages`; unknown usage is `null`. There is **no usage dashboard** — read the raw rows from the database. Chat is limited to 30 accepted attempts per account per hour and one in-flight operation at a time.
+- **Not an agent** — one message is one model call that must return a validated file manifest. No shell, containers, package installs, builds, tools, streaming, retries, or server-side execution of generated code.
+
+---
+
 ## Expiration
 
 Every upload has an expiration time you choose before submitting. Once the time passes, the link stops working and the files are cleaned up automatically. If you need the content to stay up longer, upload again and choose a longer expiration.

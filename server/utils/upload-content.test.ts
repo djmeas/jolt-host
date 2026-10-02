@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, existsSync, rmSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import archiver from 'archiver'
 import {
   isAcceptedUploadFilename,
   resolveUploadMaxBytes,
@@ -100,6 +101,76 @@ describe('writeUploadContent', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
       if (existsSync(outside)) rmSync(outside)
+    }
+  })
+})
+
+describe('writeUploadContent trusted preferred entry', () => {
+  function tempDir() {
+    return mkdtempSync(join(tmpdir(), 'jolt-content-'))
+  }
+
+  /** Builds a real ZIP so extraction is exercised through the archive reader. */
+  async function zipOf(entries: { path: string; content: string | Buffer }[]): Promise<Buffer> {
+    const archive = archiver('zip', { zlib: { level: 9 } })
+    const chunks: Buffer[] = []
+    const finished = new Promise<Buffer>((resolve, reject) => {
+      archive.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)))
+      archive.on('error', reject)
+      archive.on('end', () => resolve(Buffer.concat(chunks)))
+    })
+    for (const entry of entries) archive.append(entry.content, { name: entry.path })
+    await archive.finalize()
+    return finished
+  }
+
+  it('keeps the public requirement that a ZIP contains at least one .html file', async () => {
+    const dir = tempDir()
+    try {
+      const zip = await zipOf([{ path: 'notes.md', content: '# notes' }])
+      await expect(writeUploadContent(zip, 'site.zip', dir)).rejects.toMatchObject({ statusCode: 400 })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves a Markdown-only attached entry when the trusted caller asks for it', async () => {
+    const dir = tempDir()
+    try {
+      const zip = await zipOf([{ path: 'notes.md', content: '# notes' }])
+      const entry = await writeUploadContent(zip, 'ai-site.zip', dir, { preferredEntryFile: 'notes.md' })
+      expect(entry).toBe('notes.md')
+      expect(readFileSync(join(dir, 'notes.md'), 'utf8')).toBe('# notes')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves a nondefault HTML entry instead of index.html', async () => {
+    const dir = tempDir()
+    try {
+      const zip = await zipOf([
+        { path: 'index.html', content: '<h1>default</h1>' },
+        { path: 'home.html', content: '<h1>home</h1>' },
+      ])
+      const entry = await writeUploadContent(zip, 'ai-site.zip', dir, { preferredEntryFile: 'home.html' })
+      expect(entry).toBe('home.html')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects an unsafe, non-text, or absent preferred entry', async () => {
+    const dir = tempDir()
+    try {
+      const zip = await zipOf([{ path: 'index.html', content: '<h1>x</h1>' }])
+      for (const preferred of ['../index.html', '/index.html', 'index.txt', 'missing.html']) {
+        await expect(writeUploadContent(zip, 'ai-site.zip', dir, { preferredEntryFile: preferred })).rejects.toMatchObject(
+          { statusCode: 400 }
+        )
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
     }
   })
 })

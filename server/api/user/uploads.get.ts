@@ -10,12 +10,15 @@ export default defineEventHandler((event) => {
   const limit = Math.min(100, Math.max(1, parseInt(String(query.limit || 20), 10) || 20))
 
   const { items, total } = getUploadsByUserId(userId, page, limit)
+  const now = Date.now()
 
   return {
     items: items.map((u) => ({
       ...u,
       data_enabled: u.data_enabled === 1,
       url: canonicalSiteUrl(u.slug) ?? '',
+      // UI guidance only: the builder still authorizes every request itself.
+      ai_editable: u.user_id != null && (!u.expires_at || new Date(u.expires_at).getTime() > now),
     })),
     total,
     page,

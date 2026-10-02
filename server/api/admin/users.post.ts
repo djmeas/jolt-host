@@ -12,6 +12,7 @@ export default defineEventHandler(async (event) => {
   const password = typeof body?.password === 'string' ? body.password : ''
   const uploadMaxBytes = typeof body?.upload_max_bytes === 'number' ? body.upload_max_bytes : null
   const neverExpire = body?.never_expire === 1 || body?.never_expire === true ? 1 : 0
+  const aiBuildEnabled = body?.ai_build_enabled === 1 || body?.ai_build_enabled === true
 
   if (!name) {
     throw createError({ statusCode: 400, message: 'Name is required' })
@@ -30,7 +31,7 @@ export default defineEventHandler(async (event) => {
 
   const id = randomUUID()
   const passwordHash = hashPassword(password)
-  insertUser(id, name, email, passwordHash)
+  insertUser(id, name, email, passwordHash, aiBuildEnabled)
 
   if (uploadMaxBytes !== null || neverExpire !== 0) {
     updateUserLimits(id, uploadMaxBytes, neverExpire)
@@ -43,6 +44,7 @@ export default defineEventHandler(async (event) => {
     email: user.email,
     upload_max_bytes: user.upload_max_bytes,
     never_expire: user.never_expire,
+    ai_build_enabled: user.ai_build_enabled,
     created_at: user.created_at,
     updated_at: user.updated_at,
   }

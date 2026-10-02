@@ -1,188 +1,35 @@
-import { readMultipartFormData, setResponseHeader } from 'h3'
-import { mkdirSync, existsSync } from 'fs'
-import path from 'path'
-import { randomUUID, randomBytes } from 'crypto'
-import { getStorageDir, insertUpload, slugExists, findUserById } from '~/server/utils/db'
-import { generateUniqueSlug } from '~/server/utils/slug'
-import { hashPassword } from '~/server/utils/password'
-import { createUnlockToken } from '~/server/utils/view-auth'
-import { canonicalSiteUrl, getSiteHostConfig } from '~/server/utils/site-host'
-import { checkUploadRateLimit, getClientIP } from '~/server/utils/rate-limit'
-import { requireUploadAuthorization, hasValidApiToken, resolveUploadUserId } from '~/server/utils/upload-auth'
-import { verifyTurnstileToken } from '~/server/utils/turnstile'
-import { writeUploadContent, isAcceptedUploadFilename, resolveUploadMaxBytes } from '~/server/utils/upload-content'
-import { dataApiToggleEnabled } from '~/server/utils/upload-mode'
-import { getDataFeatureStatus } from '~/server/utils/data-auth'
-import { enableDataBySlug } from '~/server/utils/db'
+import { readMultipartFormData } from 'h3'
+import { createUploadFromContent } from '~/server/utils/upload-publish'
 
-const STORAGE = getStorageDir()
-
-/** Parses expiration form value (1h, 8h, 24h, 1w or empty) to ISO datetime or null. */
-function parseExpirationToISO(value: string): string | null {
-  if (!value) return null
-  const now = Date.now()
-  let ms = 0
-  const match = value.match(/^(\d+)(h|w|d)$/i)
-  if (!match) return null
-  const n = parseInt(match[1], 10)
-  const unit = match[2].toLowerCase()
-  if (unit === 'h') ms = n * 60 * 60 * 1000
-  else if (unit === 'd') ms = n * 24 * 60 * 60 * 1000
-  else if (unit === 'w') ms = n * 7 * 24 * 60 * 60 * 1000
-  else return null
-  return new Date(now + ms).toISOString()
-}
-
-function pathRelativeToStorage(absolutePath: string): string {
-  const rel = path.relative(STORAGE, absolutePath)
-  return rel.split(path.sep).join('/')
-}
-
+/**
+ * `POST /api/upload` is the multipart adapter for the shared creation pipeline.
+ * It only turns the form into `CreateUploadInput`; every creation rule
+ * (authorization, rate limit, CAPTCHA, password, expiration, size, canonical
+ * URL, persistence, result shape) lives in `createUploadFromContent`.
+ */
 export default defineEventHandler(async (event) => {
-  requireUploadAuthorization(event)
-
-  const ip = getClientIP(event)
-  const { allowed, retryAfter } = checkUploadRateLimit(ip)
-  if (!allowed) {
-    const err = createError({
-      statusCode: 429,
-      statusMessage: 'Too Many Requests',
-      message: `Rate limit exceeded. Try again in ${retryAfter ?? 60} seconds.`,
-    })
-    if (retryAfter) {
-      setResponseHeader(event, 'Retry-After', String(retryAfter))
-    }
-    throw err
-  }
-
   const form = await readMultipartFormData(event)
-  if (!form || form.length === 0) {
-    throw createError({ statusCode: 400, message: 'No file in request' })
+
+  const textField = (name: string): string | null => {
+    const field = form?.find((part) => part.name === name && typeof part.data === 'object')
+    return field?.data && Buffer.isBuffer(field.data) ? field.data.toString('utf8') : null
   }
 
-  if (!hasValidApiToken(event)) {
-    const turnstileField = form?.find((f) => f.name === 'cf-turnstile-response')
-    const turnstileToken = turnstileField?.data ? Buffer.isBuffer(turnstileField.data) ? turnstileField.data.toString('utf8').trim() : '' : ''
-    const turnstileOk = await verifyTurnstileToken(turnstileToken || undefined, ip)
-    if (!turnstileOk) {
-      throw createError({ statusCode: 400, message: 'Captcha verification failed. Please try again.' })
-    }
-  }
+  const file = form?.find((part) => part.name === 'file' || part.data)
+  const fileData = file?.data ? (Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data)) : null
 
-  const file = form.find((f) => f.name === 'file' || f.data)
-  if (!file?.data) {
-    throw createError({ statusCode: 400, message: 'Missing file' })
-  }
+  const enableDataRaw = textField('enable_data')
+  const turnstilePart = form?.find((part) => part.name === 'cf-turnstile-response')
 
-  const passwordField = form.find((f) => f.name === 'password' && typeof f.data === 'object')
-  const passwordRaw = passwordField?.data
-  const password = passwordRaw && Buffer.isBuffer(passwordRaw) ? passwordRaw.toString('utf8').trim() : ''
-  const passwordHash = password.length > 0 ? hashPassword(password) : null
-  if (password.length > 0 && password.length > 200) {
-    throw createError({ statusCode: 400, message: 'Password too long' })
-  }
-
-  const enableDataField = form.find((f) => f.name === 'enable_data' && typeof f.data === 'object')
-  const enableDataRaw = enableDataField?.data
-  const enableDataRequested = enableDataRaw && Buffer.isBuffer(enableDataRaw)
-    ? ['true', '1', 'on', 'yes'].includes(enableDataRaw.toString('utf8').trim().toLowerCase())
-    : false
-  if (enableDataRequested) {
-    if (!dataApiToggleEnabled()) {
-      throw createError({ statusCode: 403, message: 'The Data API opt-in is disabled on this deployment' })
-    }
-    if (password.length === 0) {
-      throw createError({ statusCode: 400, message: 'The Data API requires a site password' })
-    }
-    const feature = getDataFeatureStatus()
-    if (!feature.enabled) {
-      throw createError({
-        statusCode: 503,
-        message: feature.reason ?? 'Site data is not available on this deployment',
-      })
-    }
-  }
-
-  const expirationField = form.find((f) => f.name === 'expiration' && typeof f.data === 'object')
-  const expirationRaw = expirationField?.data
-  const expiration = expirationRaw && Buffer.isBuffer(expirationRaw) ? expirationRaw.toString('utf8').trim() : ''
-  let expiresAt = parseExpirationToISO(expiration)
-  if (expiration && !expiresAt) {
-    throw createError({ statusCode: 400, message: 'Invalid expiration value' })
-  }
-
-  const titleField = form.find((f) => f.name === 'title' && typeof f.data === 'object')
-  const titleRaw = titleField?.data
-  const title = titleRaw && Buffer.isBuffer(titleRaw) ? titleRaw.toString('utf8').trim().slice(0, 100) : null
-
-  const userId = resolveUploadUserId(event)
-  const user = userId ? findUserById(userId) : null
-  if (user && user.never_expire === 1) {
-    expiresAt = null
-  }
-
-  const filename = (file.filename || 'file').toLowerCase()
-  if (!isAcceptedUploadFilename(filename)) {
-    throw createError({ statusCode: 400, message: 'Only .html, .zip, or .md files are allowed' })
-  }
-
-  const config = useRuntimeConfig()
-  const maxBytes = resolveUploadMaxBytes({
-    userMaxBytes: user?.upload_max_bytes ?? null,
-    isApi: hasValidApiToken(event),
-    isZip: filename.endsWith('.zip'),
-    configMaxBytes: config.jolthost?.uploadMaxBytes ?? 25 * 1024 * 1024,
+  return createUploadFromContent(event, {
+    data: fileData,
+    emptyForm: !form || form.length === 0,
+    filename: file?.filename || 'file',
+    password: textField('password') ?? '',
+    expiration: textField('expiration') ?? '',
+    title: textField('title'),
+    enableData: enableDataRaw != null && ['true', '1', 'on', 'yes'].includes(enableDataRaw.trim().toLowerCase()),
+    turnstileToken:
+      turnstilePart?.data && Buffer.isBuffer(turnstilePart.data) ? turnstilePart.data.toString('utf8').trim() : '',
   })
-  const fileSize = Buffer.isBuffer(file.data) ? file.data.length : (file.data as Uint8Array).length
-  if (fileSize > maxBytes) {
-    throw createError({
-      statusCode: 413,
-      message: `File too large. Maximum size is ${Math.round(maxBytes / 1024 / 1024)}MB.`,
-    })
-  }
-
-  const slug = generateUniqueSlug(slugExists)
-  const id = randomUUID()
-  const ownerToken = randomBytes(24).toString('base64url')
-
-  // Fail closed before anything is persisted, so a misconfigured deployment can
-  // never leave a published row and files with no canonical URL to return.
-  const url = canonicalSiteUrl(slug)
-  if (!url) {
-    throw createError({
-      statusCode: 503,
-      message: `Hosted site origins are not configured on this server: ${getSiteHostConfig().reason ?? 'unknown reason'}`,
-    })
-  }
-
-  const uploadDir = path.join(STORAGE, slug)
-
-  if (!existsSync(uploadDir)) {
-    mkdirSync(uploadDir, { recursive: true })
-  }
-
-  const data = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data as ArrayBuffer)
-  const entryFile = await writeUploadContent(data, filename, uploadDir)
-  const entryPoint = pathRelativeToStorage(path.join(uploadDir, entryFile))
-
-  insertUpload(id, slug, entryPoint, passwordHash, ownerToken, expiresAt, userId, title || null)
-
-  const dataEnabled = enableDataRequested ? enableDataBySlug(slug) : false
-
-  const response: Record<string, string> = {
-    slug,
-    url,
-    entry_point: entryPoint,
-    owner_token: ownerToken,
-    expires_at: expiresAt ?? '',
-    title: title || '',
-  }
-  if (dataEnabled) {
-    response.data_enabled = 'true'
-  }
-  if (password.length > 0) {
-    const unlockToken = createUnlockToken(slug, expiresAt)
-    response.url_with_unlock = `${url}?unlock=${encodeURIComponent(unlockToken)}`
-  }
-  return response
 })

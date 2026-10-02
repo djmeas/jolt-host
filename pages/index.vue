@@ -1,12 +1,44 @@
 <script setup lang="ts">
 import { joinURL } from 'ufo'
+import type { UploadResult } from '~/composables/useResultStorage'
 
 const { data: siteConfig } = await useFetch('/api/config')
 const landingPageEnabled = computed(() => siteConfig.value?.landingPageEnabled ?? true)
 const logoUrl = joinURL(useRuntimeConfig().app.baseURL, 'JoltSlashLogo.png')
-const { isLoggedIn, refresh } = useCurrentUser()
-if (landingPageEnabled.value && siteConfig.value?.registeredUsersOnly && !isLoggedIn.value) await refresh()
+const { user, isLoggedIn, refresh } = useCurrentUser()
 const showUploader = computed(() => landingPageEnabled.value || isLoggedIn.value)
+
+// The Build tab exists only when the server has a usable AI configuration. Its
+// query parameter preselects the tab; it never grants any authorization.
+type LandingTab = 'upload' | 'build'
+const aiBuilderAvailable = computed(() => siteConfig.value?.aiBuilderAvailable === true && (!user.value || !!user.value.ai_build_enabled))
+const route = useRoute()
+const activeTab = ref<LandingTab>(route.query.tab === 'build' && aiBuilderAvailable.value ? 'build' : 'upload')
+// `?edit=<slug>` only identifies a site to confirm; it grants no authorization.
+const editSlug = computed(() => (typeof route.query.edit === 'string' && route.query.edit ? route.query.edit : null))
+
+// The builder always needs a signed-in account, so the Build tab resolves the
+// current user even in open publishing mode where the upload form does not.
+if (
+  !isLoggedIn.value &&
+  ((landingPageEnabled.value && siteConfig.value?.registeredUsersOnly) ||
+    siteConfig.value?.aiBuilderAvailable === true)
+) await refresh()
+
+watch(() => route.query.tab, (tab) => {
+  if (tab === 'build' && aiBuilderAvailable.value) {
+    activeTab.value = 'build'
+    if (!isLoggedIn.value) refresh()
+  }
+})
+
+function selectTab(tab: LandingTab) {
+  if (tab === 'build' && !aiBuilderAvailable.value) return
+  // The upload widget lives in the Upload panel; drop it before it unmounts.
+  if (tab === 'build' && activeTab.value === 'upload') cleanupTurnstile()
+  activeTab.value = tab
+  if (tab === 'build' && !isLoggedIn.value) refresh()
+}
 
 useSeoMeta({
   title: computed(() => showUploader.value ? 'Upload a Static Site' : 'Jolt Host'),
@@ -24,8 +56,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
 const uploading = ref(false)
 const error = ref<string | null>(null)
-const RESULT_STORAGE_KEY = 'jolthost-last-upload'
-const RESULT_BY_SLUG_PREFIX = 'jolthost-result-'
+const { saveResult } = useResultStorage()
 
 const turnstileContainer = ref<HTMLElement | null>(null)
 const { token: turnstileToken, isEnabled: turnstileEnabled, renderWidget, reset: resetTurnstile, cleanup: cleanupTurnstile } = useTurnstile()
@@ -34,8 +65,6 @@ watch(turnstileContainer, (element) => {
   if (element) renderWidget(element)
 }, { flush: 'post' })
 onUnmounted(() => cleanupTurnstile())
-
-type UploadResult = { url: string; slug: string; owner_token?: string; url_with_unlock?: string; data_enabled?: string }
 
 const expirationOptions = [
   { value: '1h', label: '1 hour' },
@@ -53,16 +82,6 @@ const selectedFile = ref<File | null>(null)
 const dataApiToggleAvailable = computed(() =>
   siteConfig.value?.dataFeatureAvailable === true && siteConfig.value?.dataApiToggleEnabled !== false
 )
-
-function saveResultToStorage(res: UploadResult) {
-  if (import.meta.client) {
-    try {
-      const stored = { ...res, title: siteTitle.value.trim() || undefined }
-      sessionStorage.setItem(RESULT_STORAGE_KEY, JSON.stringify(stored))
-      sessionStorage.setItem(`${RESULT_BY_SLUG_PREFIX}${res.slug}`, JSON.stringify(stored))
-    } catch (_) {}
-  }
-}
 
 function setFile(file: File | null) {
   error.value = null
@@ -169,7 +188,7 @@ async function submitForm() {
       error.value = 'Invalid response from server.'
       return
     }
-    saveResultToStorage(res)
+    saveResult(res, { title: siteTitle.value })
     await useRouter().push(`/result/${res.slug}`)
   } catch (e: unknown) {
     error.value = getUploadErrorMessage(e)
@@ -265,7 +284,40 @@ const boxPowered = ref(false)
       </div><!-- .hero-left -->
       <div class="hero-right">
         <div ref="boxRef" class="box" :class="{ 'box-powered': boxPowered }">
-          <h2 class="title">Upload a static site</h2>
+          <div v-if="aiBuilderAvailable" class="box-tabs" role="tablist" aria-label="Choose how to publish">
+            <button
+              id="tab-upload"
+              type="button"
+              role="tab"
+              class="box-tab"
+              :class="{ active: activeTab === 'upload' }"
+              :aria-selected="activeTab === 'upload'"
+              aria-controls="panel-upload"
+              @click="selectTab('upload')"
+            >Upload</button>
+            <button
+              id="tab-build"
+              type="button"
+              role="tab"
+              class="box-tab"
+              :class="{ active: activeTab === 'build' }"
+              :aria-selected="activeTab === 'build'"
+              aria-controls="panel-build"
+              @click="selectTab('build')"
+            >Build</button>
+          </div>
+          <h2 class="title">{{ activeTab === 'build' ? 'Build a site with AI' : 'Upload a static site' }}</h2>
+
+      <div v-if="activeTab === 'build'" id="panel-build" role="tabpanel" aria-labelledby="tab-build">
+        <div v-if="!isLoggedIn" class="login-notice">
+          <p>Sign in to use AI Builder.</p>
+          <NuxtLink to="/login">Log in</NuxtLink>
+          <NuxtLink v-if="siteConfig?.registrationEnabled" to="/register">Create an account</NuxtLink>
+        </div>
+        <AiBuilder v-else :edit-slug="editSlug" />
+      </div>
+
+      <div v-else id="panel-upload" role="tabpanel" aria-labelledby="tab-upload">
       <div v-if="loginRequired" class="login-notice">
         <p>Log in to publish a static site.</p>
         <NuxtLink to="/login">Log in</NuxtLink>
@@ -400,6 +452,7 @@ const boxPowered = ref(false)
         <button type="button" class="error-dismiss" aria-label="Dismiss" @click="error = null">×</button>
       </div>
       </template>
+      </div><!-- #panel-upload -->
         </div><!-- .box -->
 
       </div><!-- .hero-right -->
@@ -580,6 +633,40 @@ select#expiration option {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   text-align: center;
+}
+.box-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  padding: 0.25rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+.box-tab {
+  flex: 1;
+  padding: 0.4rem 0.75rem;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #a1a1aa;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s;
+}
+.box-tab:hover:not(.active) {
+  color: #e4e4e7;
+  background: rgba(255, 255, 255, 0.04);
+}
+.box-tab.active {
+  color: #fde047;
+  background: rgba(253, 224, 71, 0.12);
+}
+.box-tab:focus-visible {
+  outline: 2px solid rgba(167, 139, 250, 0.6);
+  outline-offset: 2px;
 }
 .title {
   margin: 0 0 0.25rem;
