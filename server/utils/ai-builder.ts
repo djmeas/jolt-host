@@ -103,8 +103,34 @@ export type AiChatCompletionResult =
     }
   | { ok: false; code: AiCompletionFailureCode; durationMs: number }
 
+/** OpenCode Go requires a stable conversation identifier for routing. */
+function isOpenCodeGoChatEndpoint(raw: string): boolean {
+  try {
+    const url = new URL(raw)
+    return url.hostname === 'opencode.ai' && url.pathname.startsWith('/zen/go/v1/chat/completions')
+  } catch {
+    return false
+  }
+}
+
+/** Identifies a stable provider conversation when the selected provider needs one. */
+function providerHeaders(config: AiProviderConfig, sessionId: string | undefined): Record<string, string> {
+  const headers = {
+    'content-type': 'application/json',
+    authorization: `Bearer ${config.apiKey}`,
+  }
+  if (sessionId && isOpenCodeGoChatEndpoint(config.chatUrl)) {
+    headers['user-agent'] = 'jolt-host/1.0'
+    headers['x-opencode-session'] = sessionId
+  }
+  return headers
+}
+
+
 export type AiChatCompletionOptions = {
   messages: AiChatMessage[]
+  /** Stable workspace session, forwarded to providers that require routing context. */
+  sessionId?: string
   /** Caller cancellation (e.g. the client disconnected). */
   signal?: AbortSignal
   /** Internal bound; production callers use the default. */
@@ -174,10 +200,7 @@ export async function aiChatCompletion(options: AiChatCompletionOptions): Promis
   try {
     const response = await fetch(config.chatUrl, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${config.apiKey}`,
-      },
+      headers: providerHeaders(config, options.sessionId),
       body: JSON.stringify({
         model: config.model,
         messages: options.messages,

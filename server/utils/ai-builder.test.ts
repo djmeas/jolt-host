@@ -89,6 +89,7 @@ function configure(baseUrl: string, overrides: Record<string, string> = {}) {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   vi.unstubAllEnvs()
   await Promise.all(
     openServers.splice(0).map(
@@ -230,6 +231,26 @@ describe('aiChatCompletion', () => {
         { role: 'user', content: 'build me a site' },
       ],
     })
+  })
+
+  it('sends the stable OpenCode Go routing headers only for its chat completion endpoint', async () => {
+    configure('https://opencode.ai/zen/go/v1')
+    const request = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(chatEnvelope), { status: 200, headers: { 'content-type': 'application/json' } })
+    )
+
+    const result = await aiChatCompletion({
+      sessionId: 'workspace-session-123',
+      messages: [{ role: 'user', content: 'build me a site' }],
+    })
+
+    expect(result).toMatchObject({ ok: true })
+    expect(request).toHaveBeenCalledOnce()
+    const [url, init] = request.mock.calls[0]!
+    expect(url).toBe('https://opencode.ai/zen/go/v1/chat/completions')
+    const headers = new Headers(init?.headers)
+    expect(headers.get('user-agent')).toBe('jolt-host/1.0')
+    expect(headers.get('x-opencode-session')).toBe('workspace-session-123')
   })
 
   it('never returns the key in its result', async () => {

@@ -144,6 +144,7 @@ export default defineEventHandler((event) =>
       }))
 
       const completion = await aiChatCompletion({
+        sessionId: workspace.session_id,
         messages: buildAiChatMessages({
           revision: workspace.revision,
           entryFile: base.entryFile,

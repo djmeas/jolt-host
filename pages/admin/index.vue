@@ -515,9 +515,12 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
               <option value="gpt-5" />
               <option value="claude-sonnet-4-5" />
               <option value="gemini-2.5-pro" />
-              <option value="opencode/big-pickle" />
+              <option value="kimi-k2.7-code" />
+              <option value="deepseek-v4.1-flash" />
+              <option value="deepseek-v4-pro" />
             </datalist>
           </label>
+          <p class="section-desc">OpenCode Go: use <code>https://opencode.ai/zen/go/v1</code> and a bare Chat Completions model ID such as <code>kimi-k2.7-code</code>; do not use the OpenCode CLI prefix <code>opencode-go/</code>. The builder does not support Responses or Messages endpoints.</p>
           <p class="section-desc">Leave the key blank to keep it unchanged. Empty Base URL or Model removes that admin override and uses the environment value. Model suggestions must be supported by your provider.</p>
           <button type="submit" class="create-token-btn" :disabled="aiSaving">{{ aiSaving ? 'Saving…' : 'Save settings' }}</button>
           <p v-if="aiSaved" class="section-desc" role="status">AI settings saved.</p>
