@@ -1,12 +1,12 @@
 export const useCurrentUser = () => {
-  const user = useState<{ id: string, name: string, email: string, upload_max_bytes: number | null, never_expire: number } | null>('currentUser', () => null)
+  const user = useState<{ id: string, name: string, email: string, upload_max_bytes: number | null, never_expire: number, ai_build_enabled: number } | null>('currentUser', () => null)
   const pending = ref(false)
 
   const refresh = async () => {
     pending.value = true
     try {
       const fetcher = import.meta.server ? useRequestFetch() : $fetch
-      const data = await fetcher<{ id: string, name: string, email: string, upload_max_bytes: number | null, never_expire: number, created_at: string }>('/api/auth/me')
+      const data = await fetcher<{ id: string, name: string, email: string, upload_max_bytes: number | null, never_expire: number, ai_build_enabled: number, created_at: string }>('/api/auth/me')
       user.value = data
     } catch {
       user.value = null

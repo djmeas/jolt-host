@@ -2,7 +2,8 @@
 import { joinURL } from 'ufo'
 
 const route = useRoute()
-const isFullWidth = computed(() => ['/previewer', '/editor'].includes(route.path))
+const isStudio = computed(() => route.path === '/build')
+const isFullWidth = computed(() => ['/previewer', '/editor', '/build'].includes(route.path))
 const runtimeConfig = useRuntimeConfig()
 const logoUrl = computed(() => joinURL(runtimeConfig.app.baseURL, 'JoltSlashLogo.png'))
 
@@ -54,7 +55,7 @@ async function logoutAdmin() {
   </Notivue>
   <ClientOnly v-if="!minimalLanding"><LightningBackground /></ClientOnly>
   <div class="app">
-    <header v-if="!minimalLanding" class="navbar">
+    <header v-if="!minimalLanding && !isStudio" class="navbar">
       <div class="navbar-left">
         <NuxtLink to="/" class="navbar-brand" aria-label="Jolt Host home">
           <!-- <img
@@ -88,10 +89,10 @@ async function logoutAdmin() {
         </template>
       </nav>
     </header>
-    <main class="main" :class="{ 'main--full': isFullWidth }">
+    <main class="main" :class="{ 'main--full': isFullWidth, 'main--studio': isStudio }">
       <NuxtPage />
     </main>
-    <footer v-if="!minimalLanding" class="footer">
+    <footer v-if="!minimalLanding && !isStudio" class="footer">
       <NuxtLink to="/how-to" class="footer-link">How to use</NuxtLink>
       <span class="footer-sep">·</span>
       <NuxtLink to="/privacy" class="footer-link">Privacy Policy</NuxtLink>
@@ -234,6 +235,9 @@ body {
   padding: 0;
   align-items: stretch;
   justify-content: stretch;
+}
+.main--studio {
+  overflow: hidden;
 }
 .footer {
   padding: 1rem 1.5rem;

@@ -49,21 +49,46 @@ function safeRelativeEntryPath(entryPath: string): string | null {
   return normalized
 }
 
+/** The subset of unzipper's central-directory API this module relies on. */
+type ZipArchiveEntry = {
+  path: string
+  type: string
+  uncompressedSize: number
+  stream: () => NodeJS.ReadableStream
+}
+type ZipArchive = { files: ZipArchiveEntry[] }
+
+/** Trusted options used only by the attached-site builder replacement. */
+export type ZipExtractionOptions = {
+  /**
+   * Preserves an attached site's active entry file. It must be an existing
+   * regular `.html` or `.md` file inside the archive and is only honored after
+   * the same complete containment/size checks as every other entry. Public
+   * multipart uploads never pass it, so default HTML selection and its
+   * "at least one .html" requirement stay exactly as they were.
+   */
+  preferredEntryFile?: string
+}
+
 /**
  * Extracts a ZIP archive into `targetDir`, rejecting entries that escape the
  * target directory and enforcing an extracted-size bound. Returns the relative
- * path of the HTML entry file.
+ * path of the entry file.
  */
-export async function extractZipSafely(buffer: Buffer, targetDir: string): Promise<string> {
-  let directory: Awaited<ReturnType<typeof unzipper.Open.buffer>>
+export async function extractZipSafely(
+  buffer: Buffer,
+  targetDir: string,
+  options: ZipExtractionOptions = {}
+): Promise<string> {
+  let directory: ZipArchive
   try {
-    directory = await unzipper.Open.buffer(buffer)
+    directory = (await unzipper.Open.buffer(buffer)) as ZipArchive
   } catch {
     throw createError({ statusCode: 400, message: 'Invalid or corrupted ZIP file.' })
   }
 
   const resolvedTarget = path.resolve(targetDir)
-  const safeEntries: { entry: (typeof directory.files)[number]; relative: string }[] = []
+  const safeEntries: { entry: ZipArchiveEntry; relative: string }[] = []
   let totalUncompressed = 0
 
   for (const entry of directory.files) {
@@ -84,9 +109,24 @@ export async function extractZipSafely(buffer: Buffer, targetDir: string): Promi
     safeEntries.push({ entry, relative })
   }
 
-  const entryFile = pickEntryFile(safeEntries.filter((e) => e.entry.type !== 'Directory').map((e) => e.relative))
-  if (!entryFile) {
-    throw createError({ statusCode: 400, message: 'ZIP must contain at least one .html file' })
+  const fileEntries = safeEntries.filter((e) => e.entry.type !== 'Directory').map((e) => e.relative)
+  let entryFile: string | undefined
+  if (options.preferredEntryFile !== undefined) {
+    const preferred = safeRelativeEntryPath(options.preferredEntryFile)
+    if (
+      preferred === null ||
+      preferred !== options.preferredEntryFile ||
+      !/\.(html|md)$/i.test(preferred) ||
+      !fileEntries.includes(preferred)
+    ) {
+      throw createError({ statusCode: 400, message: 'The preferred entry file is not a usable file in the archive' })
+    }
+    entryFile = preferred
+  } else {
+    entryFile = pickEntryFile(fileEntries)
+    if (!entryFile) {
+      throw createError({ statusCode: 400, message: 'ZIP must contain at least one .html file' })
+    }
   }
 
   mkdirSync(resolvedTarget, { recursive: true })
@@ -107,7 +147,12 @@ export async function extractZipSafely(buffer: Buffer, targetDir: string): Promi
  * Writes an uploaded `.html`/`.md` file, or extracts a `.zip`, into `targetDir`.
  * Returns the entry file path relative to `targetDir`.
  */
-export async function writeUploadContent(data: Buffer, filename: string, targetDir: string): Promise<string> {
+export async function writeUploadContent(
+  data: Buffer,
+  filename: string,
+  targetDir: string,
+  options: ZipExtractionOptions = {}
+): Promise<string> {
   const lower = filename.toLowerCase()
   mkdirSync(targetDir, { recursive: true })
   if (lower.endsWith('.html')) {
@@ -118,5 +163,5 @@ export async function writeUploadContent(data: Buffer, filename: string, targetD
     await pipeline(Readable.from(data), createWriteStream(path.join(targetDir, 'index.md')))
     return 'index.md'
   }
-  return await extractZipSafely(data, targetDir)
+  return await extractZipSafely(data, targetDir, options)
 }

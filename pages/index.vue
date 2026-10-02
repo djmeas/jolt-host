@@ -1,12 +1,24 @@
 <script setup lang="ts">
 import { joinURL } from 'ufo'
+import type { UploadResult } from '~/composables/useResultStorage'
 
 const { data: siteConfig } = await useFetch('/api/config')
 const landingPageEnabled = computed(() => siteConfig.value?.landingPageEnabled ?? true)
 const logoUrl = joinURL(useRuntimeConfig().app.baseURL, 'JoltSlashLogo.png')
-const { isLoggedIn, refresh } = useCurrentUser()
-if (landingPageEnabled.value && siteConfig.value?.registeredUsersOnly && !isLoggedIn.value) await refresh()
+const { user, isLoggedIn, refresh } = useCurrentUser()
 const showUploader = computed(() => landingPageEnabled.value || isLoggedIn.value)
+
+// The Builder Studio link exists only when the server has a usable AI
+// configuration; it navigates to `/build`, which enforces account access.
+const aiBuilderAvailable = computed(() => siteConfig.value?.aiBuilderAvailable === true && (!user.value || !!user.value.ai_build_enabled))
+
+// The builder always needs a signed-in account, so the landing page resolves the
+// current user even in open publishing mode where the upload form does not.
+if (
+  !isLoggedIn.value &&
+  ((landingPageEnabled.value && siteConfig.value?.registeredUsersOnly) ||
+    siteConfig.value?.aiBuilderAvailable === true)
+) await refresh()
 
 useSeoMeta({
   title: computed(() => showUploader.value ? 'Upload a Static Site' : 'Jolt Host'),
@@ -24,8 +36,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
 const uploading = ref(false)
 const error = ref<string | null>(null)
-const RESULT_STORAGE_KEY = 'jolthost-last-upload'
-const RESULT_BY_SLUG_PREFIX = 'jolthost-result-'
+const { saveResult } = useResultStorage()
 
 const turnstileContainer = ref<HTMLElement | null>(null)
 const { token: turnstileToken, isEnabled: turnstileEnabled, renderWidget, reset: resetTurnstile, cleanup: cleanupTurnstile } = useTurnstile()
@@ -34,8 +45,6 @@ watch(turnstileContainer, (element) => {
   if (element) renderWidget(element)
 }, { flush: 'post' })
 onUnmounted(() => cleanupTurnstile())
-
-type UploadResult = { url: string; slug: string; owner_token?: string; url_with_unlock?: string; data_enabled?: string }
 
 const expirationOptions = [
   { value: '1h', label: '1 hour' },
@@ -53,16 +62,6 @@ const selectedFile = ref<File | null>(null)
 const dataApiToggleAvailable = computed(() =>
   siteConfig.value?.dataFeatureAvailable === true && siteConfig.value?.dataApiToggleEnabled !== false
 )
-
-function saveResultToStorage(res: UploadResult) {
-  if (import.meta.client) {
-    try {
-      const stored = { ...res, title: siteTitle.value.trim() || undefined }
-      sessionStorage.setItem(RESULT_STORAGE_KEY, JSON.stringify(stored))
-      sessionStorage.setItem(`${RESULT_BY_SLUG_PREFIX}${res.slug}`, JSON.stringify(stored))
-    } catch (_) {}
-  }
-}
 
 function setFile(file: File | null) {
   error.value = null
@@ -169,7 +168,7 @@ async function submitForm() {
       error.value = 'Invalid response from server.'
       return
     }
-    saveResultToStorage(res)
+    saveResult(res, { title: siteTitle.value })
     await useRouter().push(`/result/${res.slug}`)
   } catch (e: unknown) {
     error.value = getUploadErrorMessage(e)
@@ -265,7 +264,12 @@ const boxPowered = ref(false)
       </div><!-- .hero-left -->
       <div class="hero-right">
         <div ref="boxRef" class="box" :class="{ 'box-powered': boxPowered }">
+          <div v-if="aiBuilderAvailable" class="box-ai">
+            <NuxtLink to="/build" class="box-ai-link">Build a site with AI</NuxtLink>
+          </div>
           <h2 class="title">Upload a static site</h2>
+
+      <div id="panel-upload">
       <div v-if="loginRequired" class="login-notice">
         <p>Log in to publish a static site.</p>
         <NuxtLink to="/login">Log in</NuxtLink>
@@ -400,6 +404,7 @@ const boxPowered = ref(false)
         <button type="button" class="error-dismiss" aria-label="Dismiss" @click="error = null">×</button>
       </div>
       </template>
+      </div><!-- #panel-upload -->
         </div><!-- .box -->
 
       </div><!-- .hero-right -->
@@ -580,6 +585,30 @@ select#expiration option {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   text-align: center;
+}
+.box-ai {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.9rem;
+}
+.box-ai-link {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #c4b5fd;
+  text-decoration: none;
+  padding: 0.35rem 0.85rem;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  border-radius: 999px;
+  background: rgba(167, 139, 250, 0.12);
+  transition: background 0.2s, border-color 0.2s;
+}
+.box-ai-link:hover {
+  background: rgba(167, 139, 250, 0.22);
+  border-color: rgba(167, 139, 250, 0.55);
+}
+.box-ai-link:focus-visible {
+  outline: 2px solid rgba(167, 139, 250, 0.6);
+  outline-offset: 2px;
 }
 .title {
   margin: 0 0 0.25rem;

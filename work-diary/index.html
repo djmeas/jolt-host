@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Builder Work Diary — Jolt Host</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    background: #09090b; color: #e4e4e7;
+    margin: 0; padding: 2rem 1rem;
+    max-width: 60rem; margin-inline: auto;
+    line-height: 1.6;
+  }
+  header.masthead { border-bottom: 1px solid rgba(255,255,255,.12); padding-bottom: 1.25rem; margin-bottom: 2rem; }
+  .eyebrow { text-transform: uppercase; letter-spacing: .08em; font-size: .75rem; color: #a78bfa; margin: 0 0 .25rem; }
+  h1 { font-size: 1.6rem; margin: 0 0 .5rem; }
+  .meta { font-size: .85rem; color: #a1a1aa; }
+  .meta code { color: #c4b5fd; }
+  h2 { font-size: 1.15rem; border-bottom: 1px solid rgba(167,139,250,.3); padding-bottom: .3rem; margin-top: 2.5rem; }
+  h3 { font-size: .95rem; margin: 1.5rem 0 .5rem; color: #c4b5fd; }
+  .milestone { border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 1rem 1.25rem; margin: 1rem 0; background: rgba(255,255,255,.02); }
+  .milestone .stamp { font-size: .78rem; color: #a1a1aa; }
+  .milestone ul { margin: .5rem 0 0; padding-left: 1.2rem; }
+  .milestone li { margin: .3rem 0; font-size: .92rem; }
+  .badge { display: inline-block; font-size: .7rem; padding: .1rem .5rem; border-radius: 99px; border: 1px solid; margin-left: .4rem; vertical-align: middle; }
+  .badge.done { color: #86efac; border-color: rgba(134,239,172,.4); }
+  .badge.active { color: #fde047; border-color: rgba(253,224,71,.4); }
+  table.qa { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  table.qa th, table.qa td { text-align: left; padding: .55rem .6rem; border-bottom: 1px solid rgba(255,255,255,.08); vertical-align: top; }
+  table.qa th { color: #a1a1aa; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+  table.qa td.q { width: 45%; }
+  .status { font-size: .75rem; font-weight: 600; }
+  .status.answered { color: #86efac; }
+  .status.pending { color: #fde047; }
+  code, pre { font-family: ui-monospace, 'Cascadia Code', Menlo, monospace; }
+  code { background: rgba(255,255,255,.06); padding: .1rem .35rem; border-radius: 5px; font-size: .85em; }
+  pre { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); padding: .75rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; }
+  footer { margin-top: 3rem; font-size: .8rem; color: #71717a; border-top: 1px solid rgba(255,255,255,.08); padding-top: 1rem; }
+</style>
+</head>
+<body>
+<header class="masthead">
+  <p class="eyebrow">Jolt Host · AI Builder MVP</p>
+  <h1>⚡ Work Diary</h1>
+  <p class="meta">
+    Live build log for the <strong>AI Builder</strong> implementation (<code>docs/plans/vibe-code-site-builder.md</code>).
+    This page is a no-build static artifact, re-uploaded through Jolt Host's own
+    <code>PUT /api/uploads/[slug]/content</code> endpoint at every milestone.<br>
+    Branch <code>DataApiCleanUp</code> · planned at <code>707f1dc</code> · started 2026-10-01
+  </p>
+</header>
+
+<h2>Milestones</h2>
+
+<div class="milestone">
+  <h3 style="margin-top:0">M0 — Bootstrap: diary hosted on Jolt Host <span class="badge done">done</span></h3>
+  <p class="stamp">2026-10-01 · before implementation</p>
+  <ul>
+    <li>Plan finalized via plan-builder subagent (verified all file:line references at HEAD <code>707f1dc</code>, 548-line executor spec).</li>
+    <li>Dev server started (<code>npm run dev</code>, port 3000); diary site created and uploaded through the regular upload endpoint.</li>
+    <li>Every later milestone replaces this same site in place — the URL never changes.</li>
+  </ul>
+</div>
+
+<div class="milestone">
+  <h3 style="margin-top:0">M1 — Rebased onto <code>feature/ai-builder</code> <span class="badge done">done</span></h3>
+  <p class="stamp">2026-10-01 · during implementation</p>
+  <ul>
+    <li><code>DataApiCleanUp</code> merged to <code>main</code> as PR #21 — <code>origin/main</code> is at <code>707f1dc</code>, exactly the commit the plan was planned against.</li>
+    <li>New branch <code>feature/ai-builder</code> created from <code>origin/main</code>; in-flight phase 1–2 work carried over (plan references remain valid, no drift).</li>
+    <li>Diary URL unchanged — this very replacement proved the full-replacement pipeline the builder's edit mode will reuse.</li>
+  </ul>
+</div>
+
+<div class="milestone">
+  <h3 style="margin-top:0">M2 — Phases 1–2: config, provider connection, schema, workspace <span class="badge done">done</span></h3>
+  <p class="stamp">2026-10-01 · implementer-budget subagent</p>
+  <ul>
+    <li><code>server/utils/ai-builder.ts</code> — <code>aiBuilderAvailable()</code> (key present + <code>ENABLE_AI_BUILDER !== 'false'</code>); <code>aiChatCompletion()</code>: single bounded call (60 s abort, 8 MiB decoded-response cap enforced while streaming, <code>max_tokens</code> 32768, tool_calls/malformed/truncated completions rejected, provider-reported usage only, no retries/fallback, key never surfaces).</li>
+    <li><code>server/utils/ai-workspace.ts</code> — workspace root <code>storage/.workspaces/&lt;user-id&gt;</code> (test mode: <code>test/tmp-storage/.workspaces</code>); atomic staging-then-swap generations; path validation rejects traversal/absolute/symlink escapes; caps: 50 files, 1 MiB/file, 5 MiB workspace; editable extensions <code>.html .css .js .md .txt .svg .json</code>; entry <code>.html/.md</code>.</li>
+    <li><code>server/utils/db.ts</code> — additive only (+387): <code>ai_workspaces</code> + <code>ai_messages</code> DDL and index byte-for-byte per plan §4 (verified via <code>sqlite_master</code>); CAS workspace switching, pending-turn insert + single-transaction finalization, <code>truncateUtf8Bytes</code>, <code>deleteAiDataForUser</code>.</li>
+    <li>Tests: 56 new (18 + 38); <code>npm run test:unit</code> → <strong>255 passed, 23 files</strong>; throwaway loopback script proved chunked 8 MiB overflow rejected without <code>Content-Length</code>.</li>
+  </ul>
+</div>
+
+<div class="milestone">
+  <h3 style="margin-top:0">M3 — Phase 3: chat turns and manifest pipeline <span class="badge done">done</span></h3>
+  <p class="stamp">2026-10-01 · implementer-budget subagent</p>
+  <ul>
+    <li><code>server/api/ai/chat.post.ts</code> — full turn: availability → origin check → bounded body → in-flight guard → revision CAS → budget → pending transcript rows → one provider call → manifest validation → staged generation → single-transaction switch + finalize. Failures leave the workspace byte-identical (fingerprint-asserted) and mark transcript rows <code>status=error</code>.</li>
+    <li>Prompt: system contract → last 4 successful pairs (≤ 32 KiB) → <code>&lt;current_workspace&gt;</code> JSON with full editable file contents → user message. Mock-captured provider requests proved contents (including deleted files) are sent.</li>
+    <li><code>server/api/ai/files.get.ts</code> + <code>[...path].get.ts</code> — read-only workspace listing/read; opaque and binary-content files → 403 <code>opaque_file</code>; per-user isolation (404 cross-user); <code>Cache-Control: no-store</code>.</li>
+    <li>New: <code>server/utils/ai-http.ts</code> (shared auth/origin/error for AI routes) and <code>ai-rate-limit.ts</code> (30 turns/user/rolling hour; one in-flight per user).</li>
+    <li>Real-runtime smoke against the dev server proved route registration (<code>503 ai_unavailable</code> before everything else — no key configured on the dev box yet).</li>
+    <li>Tests: <code>npm run test:unit</code> → <strong>302 passed, 26 files</strong> (47 new). Endpoint tests drive real handlers over loopback HTTP with a real provider mock, real SQLite, real signed cookies.</li>
+  </ul>
+</div>
+
+<div class="milestone">
+  <h3 style="margin-top:0">M4 — Phase 4: shared publication helper and preview <span class="badge done">done</span></h3>
+  <p class="stamp">2026-10-01 · implementer-budget subagent</p>
+  <ul>
+    <li><code>server/utils/upload-publish.ts</code> — <code>createUploadFromContent()</code>: creation policy now has one home (auth, rate limit, turnstile, password, data opt-in, expiration, size, fail-closed canonical URL, write, insert, result shape). <code>server/api/upload.post.ts</code> is a thin multipart adapter — external behavior unchanged (existing config test passes unmodified).</li>
+    <li><code>server/api/ai/preview.post.ts</code> — <code>buildWorkspaceZip()</code> (committed editable files only, sorted; opaque/snapshots excluded) → shared helper → exact <code>UploadResult</code>. Errors per §7: 409 <code>empty_workspace</code>/<code>attached_workspace</code>/<code>workspace_conflict</code>/<code>workspace_busy</code>, 413 on account compressed-size limit (never silently raised), 403 <code>data_toggle_disabled</code>.</li>
+    <li>Preview provably does not mutate workspace revision/generation; ZIP contents asserted (exactly <code>index.html</code> + <code>styles/site.css</code> for a two-file workspace).</li>
+    <li>Tests: <code>npm run test:unit</code> → <strong>315 passed, 27 files</strong> (13 new preview tests).</li>
+  </ul>
+</div>
+
+<div class="milestone">
+  <h3 style="margin-top:0">M5 — Phase 5: landing Build tab UI and docs <span class="badge done">done</span></h3>
+  <p class="stamp">2026-10-01 · implementer-budget subagent</p>
+  <ul>
+    <li><code>components/AiBuilder.vue</code> — chat pane (8 KiB-aware byte counter), plain-text transcript (pending/error tags; <strong>never</strong> v-html — model HTML-looking text asserted to render inert), workspace file list with editable/asset labels, JSON file viewer in <code>&lt;pre&gt;</code>, Preview form (title/expiration/password/Data API + Turnstile), revision CAS (<code>workspace_conflict</code>/<code>workspace_busy</code> → refresh prompt), 429 <code>Retry-After</code> wording.</li>
+    <li><code>pages/index.vue</code> — accessible <strong>Upload | Build</strong> tab strip in the hero box, gated by <code>aiBuilderAvailable</code>; <code>?tab=build</code> preselection; per-tab sign-in notices; Turnstile widget lifecycle handled across tab switches. Minimal landing unchanged.</li>
+    <li>New <code>composables/useResultStorage.ts</code> unifies the sessionStorage result convention; <code>pages/result/[slug].vue</code> now uses it; dashboard header gains an "AI Builder" deep link (<code>/?tab=build</code>).</li>
+    <li><code>server/api/config.get.ts</code> now exposes <code>aiBuilderAvailable</code> (was missing after phase 1 scope split — raised by the subagent, approved live).</li>
+    <li>Docs: <code>.env.example</code> (4 new vars), README feature section (config, caps, cost rows, persistence, codegen-only disclosure), <code>docs/how-to.md</code> user walkthrough + operator notes.</li>
+    <li>Tests: unit 315 passed / 27 files; composables <strong>43 passed</strong> (6 new); 8 mountSuspended assertions incl. tab gating and XSS-rendering check; live-server smoke proved <code>503 ai_unavailable</code> on all AI routes with no key configured.</li>
+  </ul>
+</div>
+
+<div class="milestone">
+  <h3 style="margin-top:0">M6 — Phase 6: edit an existing site (attach, opaque carry, restore, replace) <span class="badge done">done</span></h3>
+  <p class="stamp">2026-10-01 · implementer-budget subagent</p>
+  <ul>
+    <li><code>server/utils/upload-publish.ts</code> gains <code>replaceUploadFromContent()</code> — replacement policy extracted; <code>content.put.ts</code> is now a thin adapter distinguishing ordinary uploads (file/owner_token) from builder publishes (form marker <code>ai_workspace_revision</code>); existing content-put tests pass <em>unmodified</em>.</li>
+    <li><code>server/api/ai/attach.post.ts</code> — owner/admin-only attach; seeds workspace from the live served root; classifies binaries as opaque <em>before</em> any workspace row/file exists (atomic 413 <code>editable_workspace_too_large</code> / <code>source_too_large</code> refusal leaves prior workspace unchanged).</li>
+    <li><code>server/api/ai/restore.post.ts</code> + <code>reset.post.ts</code> — per-edit-session <code>.pre-edit-&lt;timestamp&gt;</code> snapshots; restore into a new revision (hosted site unchanged until explicit publish, then original bytes + binaries republished); reset clears attachment/snapshot for a fresh new-mode session, keeping old transcripts as cost history.</li>
+    <li>Publish-changes (builder PUT via content-put adapter): server-packaged text + opaque bytes (sha-identical) with same slug/URL/id/created_at/title/password/<code>data_enabled</code> — no new row, no new owner token; workspace revision/generation unchanged; stale-baseline 409.</li>
+    <li>UI: AiBuilder attached mode (attach confirmation, Publish changes, Restore previous version, Start a new site); <code>?edit=&lt;slug&gt;</code> deep link; dashboard rows gain "Edit with AI" when <code>ai_editable</code> (new flag on user/admin uploads lists; admin list no longer leaks internal <code>user_id</code>).</li>
+    <li>Tests: <code>npm run test:unit</code> → <strong>347 passed, 29 files</strong> (32 new: 17 attached-mode + 11 attach-workspace + 4 zip-entry).</li>
+  </ul>
+</div>
+
+<div class="milestone">
+  <h3 style="margin-top:0">M7 — Integrated release gate <span class="badge done">done</span></h3>
+  <p class="stamp">2026-10-01 · parent verification</p>
+  <ul>
+    <li><strong>Integration harness (A1–A23, 24 new scenarios, 0 stubs/skips):</strong> real built Nitro instances (restricted/open/missing-key/kill-switch/CAPTCHA/data-off/unusable-origins variants) against a loopback OpenAI-compatible mock provider with deterministic hold/release control. Assertions inspect hosted bytes, SQLite records, and private workspace filesystem.</li>
+    <li><strong>Two real product bugs found and fixed by the scenarios:</strong> (1) a held chat turn resumed after account deletion and recreated private files — now rechecks the live account before staging (A11); (2) publication could succeed after target reownership during preparation — publication CAS now includes the observed owner, and replacement freezes the original immutable upload id (A21/A23).</li>
+    <li><strong>Release gate commands:</strong> <code>test:unit</code> → 347 passed · <code>test:composables</code> → 43 passed · <code>test:integration</code> → <strong>74 passed (50 existing + 24 new, all green unmodified except one removed incidental wiring assertion)</strong> · <code>npm run build</code> → exit 0 (8.12 MB output).</li>
+    <li><strong>Browser smoke (B1–B5), real surface, mock provider:</strong> B1 tabs/actions hidden while unavailable; logged-out notice; config exposes flag. B2 generated a dark starter page; model HTML-looking text rendered inert; file viewer escapes HTML. B3 preview → real hosted URL serving generated content; patch → light theme → second preview; both sites distinct slugs and both in dashboard. B4 reload persists workspace + transcript. B5 Edit-with-AI from dashboard ⋯ menu → attach confirmation → seeded text + binary classified opaque → patch stayed local (hosted root still locked, Data API still 401) → Publish changes → same URL, password/data untouched, favicon sha-identical → Restore locally (hosted unchanged) → Publish → original bytes and sha back at the same URL.</li>
+    <li><code>git diff --check</code> → exit 0. Throwaway smoke scripts and fixtures deleted; no test credentials in tree.</li>
+  </ul>
+</div>
+
+<div class="milestone">
+  <h3 style="margin-top:0">M8 — Admin-managed AI settings + per-user Build Mode <span class="badge done">done</span></h3>
+  <p class="stamp">2026-10-01 · implementer-expert subagent + parent verification</p>
+  <ul>
+    <li><strong>Operators configure the builder in the Admin dashboard</strong> (new "AI" tab): Base URL, provider key (password input, stored AES-256-GCM-encrypted in SQLite; only a last-4 hint ever returns), and model (text + datalist). <code>GET/PUT /api/admin/ai/settings</code> (requireAdmin, 401 unauth verified live).</li>
+    <li><strong>Precedence:</strong> admin DB settings override env field-by-field; clearing an override falls back to <code>JOLT_AI_*</code> env; nothing set → 503 fail-closed. Verified live: PUT moved source <code>env → admin</code> and swapping keys changed provider auth (the mock rejected the admin key until I aligned it — precedence working exactly as designed).</li>
+    <li><strong>Per-user "Enable Build Mode" toggle</strong>: <code>users.ai_build_enabled</code> (default <strong>off</strong>); Users tab gains a Build Mode column toggle (one-click PATCH); <code>PATCH /api/admin/users/[id]</code> and create-user accept the flag; <code>/api/auth/me</code> exposes it. New 403 <code>builder_disabled</code> guards every AI route (admin sessions don't bypass it). Verified live: chat 403 off → toggle → me flips 0→1.</li>
+    <li>Build tab visibility honors the flag (hidden for disabled signed-in users); friendly error wording added.</li>
+    <li>Two plan-contract decisions approved during implementation: encryption chain <code>JOLT_ADMIN_SECRET ?? JOLT_VIEW_SECRET ?? dev default</code> (matches admin-auth); shipped HTTPS-or-loopback URL validation retained.</li>
+    <li>Tests: <code>test:unit</code> → <strong>354 passed / 30 files</strong>, <code>test:integration</code> → <strong>75 passed</strong>, <code>test:composables</code> → <strong>43 passed</strong> (new coverage: encrypted-at-rest bytes, masked settings, default-off users, enable → chat 200 → disable → 403, clearing settings → env fallback).</li>
+  </ul>
+</div>
+
+<h2>Questions &amp; answers</h2>
+<p class="meta">Questions raised during implementation, and their resolution. Pending questions block the phase that raised them.</p>
+<table class="qa">
+  <thead><tr><th>Question</th><th>Answer</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="q">Who pays for LLM usage — operator key or per-user keys?</td>
+      <td>Operator supplies one server-side key (<code>JOLT_AI_API_KEY</code>, OpenCode gateway, OpenAI-compatible endpoint). No BYOK in MVP; fails closed without a key.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Full agent runtime or codegen-only?</td>
+      <td>Codegen-only MVP: one chat turn = one LLM call = one validated JSON file manifest. No shell, no containers; agent runtime deferred to phase 2+.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Where does the builder live in the UI?</td>
+      <td><strong>Build</strong> tab in the landing-page upload box (Upload | Build tab strip); dashboard keeps a secondary deep link. No new route.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Can the builder edit an existing upload?</td>
+      <td>Yes — phase 6: attach an owned site, seed workspace from the live generation, publish via replacement (same URL; expiration, password, Data API state untouched). Binaries carried through as non-editable.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">What error code names the chat rate limit (plan left it unnamed)?</td>
+      <td><code>rate_limited</code> — matches the data API's naming style; 429 includes <code>retry_after</code> and <code>Retry-After</code> header.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Which 409 code when a turn's CAS fails at finalize (e.g. account deleted mid-call)?</td>
+      <td><code>workspace_conflict</code> — distinct from <code>workspace_busy</code> (another turn in flight); plan permitted either.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Oversized provider manifest — 502 or 413?</td>
+      <td>502 <code>invalid_model_output</code>. 413 stays reserved for client request bodies; a bad model response is a provider failure, not a client error.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Empty workspace at preview — 400 or 409?</td>
+      <td>409 <code>empty_workspace</code>, per binding plan §7:320 (the task's acceptance bullet misquoted it; subagent correctly followed the plan).</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Extract the replace-content helper now too?</td>
+      <td>Deferred to phase 6 — that's where its only new caller (attached publish mode) lands. Only <code>createUploadFromContent</code> extracted in phase 4.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Who owns adding <code>aiBuilderAvailable</code> to <code>/api/config</code>?</td>
+      <td>Phase 5 — phase 1-2 scoped to <code>server/utils</code> only, so the flag never landed; UI subagent raised the gap live, parent approved, added there.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Where does the replacement rate limit live after the helper extraction?</td>
+      <td>In the adapters, once, <em>before</em> the body is read — keeps the existing content-put ordering contract green; the helper carries all other replacement rules.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Can attached publish drop a site's binaries?</td>
+      <td>No — <code>buildWorkspaceZip</code> includes opaque assets (hash-identical through publish); new-mode previews unaffected since those workspaces hold no opaque files.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Which code for an unusable attached source layout (plan names none)?</td>
+      <td>400 <code>invalid_path</code> — mapped from the internal manifest code at the attach boundary.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Why did the whole dev server hang mid-implementation?</td>
+      <td>Not a product bug: the dev watcher watches <code>test/tmp-storage</code>, and the integration run created hundreds of files → hundreds of Nitro reload events wedged the watcher. Restarting the server fixed it; run integration tests with the dev server stopped, or accept the churn.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Does an AI publish ever leak the provider key or raw model output?</td>
+      <td>No — key resolves server-side only and never enters results/transcripts; transcript rows store sanitized content; error finalizations store provider usage where available, never raw responses (asserted across invalid/timeout/overflow paths).</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">AES key chain on the provider key at rest — ADMIN or VIEW secret first?</td>
+      <td><code>JOLT_ADMIN_SECRET ?? JOLT_VIEW_SECRET ?? dev default</code> — mirroring <code>admin-auth.ts</code> exactly; the plan text had it inverted and the implementer flagged it before implementing.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Default state of Build Mode for existing/new users?</td>
+      <td>Off. The admin's per-row toggle is the deliberate grant; tests and the live check prove 403 → toggle → 200 end to end.</td>
+      <td class="status answered">answered</td>
+    </tr>
+    <tr>
+      <td class="q">Chat rejected with <code>invalid_model_output</code> on a healthy provider — bug?</td>
+      <td>No: the smoke mock always "adds" <code>index.html</code> which already existed after restore — add-on-existing is a per-contract manifest violation. <code>POST /api/ai/reset</code> clears the draft; next turn succeeded (revision 7 → 8).</td>
+      <td class="status answered">answered</td>
+    </tr>
+  </tbody>
+</table>
+
+<footer>
+  Work diary for the Jolt Host AI Builder MVP · hosted by the very service being built · last updated at milestone M8 (admin settings + per-user Build Mode)
+</footer>
+</body>
+</html>

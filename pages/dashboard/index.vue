@@ -11,6 +11,7 @@ type UploadRow = {
   data_enabled?: boolean | number
   title?: string | null
   url?: string
+  ai_editable?: boolean
 }
 
 type UploadsResponse = {
@@ -26,9 +27,10 @@ const { data: adminSession } = await useFetch('/api/admin/session', { key: 'admi
 const isAdmin = computed(() => adminSession.value?.authenticated ?? false)
 const { data: siteConfig } = await useFetch('/api/config')
 const dataFeatureAvailable = computed(() => siteConfig.value?.dataFeatureAvailable === true)
+const aiBuilderAvailable = computed(() => siteConfig.value?.aiBuilderAvailable === true && !!user.value?.ai_build_enabled)
 const { siteUrlFor, origins } = useSiteUrl()
 
-if (!isAdmin.value && !isLoggedIn.value) await refreshUser()
+if (!isLoggedIn.value) await refreshUser()
 if (!isAdmin.value && !isLoggedIn.value) await navigateTo('/login')
 
 const activeTab = ref<'uploads' | 'account'>('uploads')
@@ -490,6 +492,7 @@ onMounted(() => {
     <div class="dashboard">
       <div class="header">
         <h1 class="title">Dashboard</h1>
+        <NuxtLink v-if="aiBuilderAvailable" to="/build" class="header-ai-link">AI Builder</NuxtLink>
         <span v-if="isAdmin" class="header-user">Admin</span>
         <span v-else-if="user" class="header-user">{{ user.name }}</span>
       </div>
@@ -685,6 +688,14 @@ onMounted(() => {
                             <button type="button" class="menu-item" @click="startEditPassword(u.slug); closeMenu()">Change password</button>
                             <button type="button" class="menu-item" @click="startEditExpiry(u.slug, u); closeMenu()">Change expiry</button>
                             <button type="button" class="menu-item" @click="goToUpdate(u.slug)">Replace files</button>
+                            <NuxtLink
+                              v-if="aiBuilderAvailable && u.ai_editable"
+                              :to="`/build?edit=${encodeURIComponent(u.slug)}`"
+                              class="menu-item menu-item-link"
+                              @click="closeMenu()"
+                            >
+                              Edit with AI
+                            </NuxtLink>
                             <button
                               type="button"
                               class="menu-item"
@@ -893,6 +904,18 @@ onMounted(() => {
   font-size: 0.9rem;
   color: #a1a1aa;
 }
+.header-ai-link {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid rgba(253, 224, 71, 0.4);
+  border-radius: 999px;
+  color: #fde047;
+  text-decoration: none;
+}
+.header-ai-link:hover {
+  background: rgba(253, 224, 71, 0.12);
+}
 .tabs {
   display: flex;
   gap: 0.5rem;
@@ -1034,6 +1057,9 @@ onMounted(() => {
   border-radius: 5px;
   color: #e4e4e7;
   cursor: pointer;
+}
+.menu-item-link {
+  text-decoration: none;
 }
 .menu-item:hover {
   background: rgba(255, 255, 255, 0.07);

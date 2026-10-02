@@ -1,36 +1,157 @@
-import { readMultipartFormData, getRouterParam, setResponseHeader, createError } from 'h3'
-import path from 'path'
-import { randomUUID } from 'crypto'
-import { getStorageDir, findUploadBySlug, findUserById, updateEntryPointIfUnchanged } from '~/server/utils/db'
 import {
-  createStagingDir,
-  publishStagedDir,
-  removeContentDir,
-  retireContentPath,
-  pruneStaging,
-  pruneTrash,
-} from '~/server/utils/storage'
+  readMultipartFormData,
+  getRouterParam,
+  setResponseHeader,
+  createError,
+  type MultiPartData,
+} from 'h3'
+import type { H3Event } from 'h3'
+import { buildWorkspaceZip } from '~/server/utils/ai-workspace'
+import { aiBuilderAvailable } from '~/server/utils/ai-builder'
+import { getAiWorkspace, updateAiWorkspaceAttachedEntryPoint } from '~/server/utils/db'
 import {
-  writeUploadContent,
-  isAcceptedUploadFilename,
-  resolveUploadMaxBytes,
-} from '~/server/utils/upload-content'
-import { authorizeContentUpdate } from '~/server/utils/update-auth'
-import { canonicalSiteUrl, getSiteHostConfig } from '~/server/utils/site-host'
+  aiError,
+  requireAiOrigin,
+  requireAiUser,
+  requireAttachedTarget,
+  runAiApi,
+  type AiErrorCode,
+} from '~/server/utils/ai-http'
+import { releaseAiOperation, tryAcquireAiOperation } from '~/server/utils/ai-rate-limit'
 import { checkUploadRateLimit, getClientIP } from '~/server/utils/rate-limit'
-import { hasValidApiToken } from '~/server/utils/upload-auth'
-import { verifyTurnstileToken } from '~/server/utils/turnstile'
-import { getUserIdFromEvent } from '~/server/utils/user-auth'
+import {
+  isUploadPublishFailure,
+  replaceUploadFromContent,
+  type ReplaceUploadResult,
+  type UploadPublishFailure,
+} from '~/server/utils/upload-publish'
 
-const STORAGE = getStorageDir()
+/**
+ * Content PUT is a thin adapter over the shared replacement helper. Its
+ * ordinary multipart mode (`file` + `owner_token`) is unchanged. Builder mode is
+ * the same endpoint with `ai_workspace_revision` instead of a file: the server
+ * packages the signed-in owner's attached workspace, so opaque assets never
+ * round-trip through the browser.
+ */
+const AI_REVISION_FIELD = 'ai_workspace_revision'
 
-function pathRelativeToStorage(absolutePath: string): string {
-  return path.relative(STORAGE, absolutePath).split(path.sep).join('/')
+/** Management controls that must not accompany a builder publication. */
+const BUILDER_FORBIDDEN_FIELDS = ['file', 'owner_token', 'title', 'password', 'expiration', 'enable_data'] as const
+
+const REPLACE_CODE_BY_STATUS: Partial<Record<number, AiErrorCode>> = {
+  400: 'invalid_request',
+  401: 'authentication_required',
+  403: 'target_forbidden',
+  404: 'target_unavailable',
+  409: 'workspace_conflict',
+  413: 'request_too_large',
+  429: 'rate_limited',
+  503: 'ai_unavailable',
 }
 
-function readFormField(form: Awaited<ReturnType<typeof readMultipartFormData>>, name: string): string {
-  const field = form?.find((f) => f.name === name && typeof f.data === 'object')
+function readFormField(form: MultiPartData[], name: string): string {
+  const field = form.find((part) => part.name === name && typeof part.data === 'object')
   return field?.data && Buffer.isBuffer(field.data) ? field.data.toString('utf8').trim() : ''
+}
+
+/** A builder publication keeps the replacement pipeline's status but the AI shape. */
+function mapReplaceFailure(error: UploadPublishFailure): Error {
+  const code =
+    REPLACE_CODE_BY_STATUS[error.statusCode] ??
+    (error.statusCode >= 500 ? 'workspace_storage_failed' : 'invalid_request')
+  return aiError(
+    error.statusCode,
+    code,
+    error.message || 'The builder publication could not be completed.',
+    error.retryAfter !== undefined ? { retry_after: error.retryAfter } : undefined
+  )
+}
+
+/**
+ * Publishes the authenticated owner's attached workspace to that same upload.
+ * It re-derives the target and its attach-time baseline from the workspace row,
+ * never from client fields, and lets the replacement helper's conditional DB
+ * switch reject an intervening edit.
+ */
+async function publishAttachedWorkspace(
+  event: H3Event,
+  slug: string,
+  form: MultiPartData[],
+  revisionRaw: string
+): Promise<ReplaceUploadResult> {
+  if (!aiBuilderAvailable()) {
+    throw aiError(503, 'ai_unavailable', 'AI Builder is not available on this server.')
+  }
+  const userId = requireAiUser(event)
+  requireAiOrigin(event)
+
+  if (!/^\d+$/.test(revisionRaw)) {
+    throw aiError(400, 'invalid_request', '"ai_workspace_revision" must be a nonnegative integer.')
+  }
+  const revision = Number(revisionRaw)
+  if (!Number.isSafeInteger(revision) || revision < 0) {
+    throw aiError(400, 'invalid_request', '"ai_workspace_revision" must be a nonnegative integer.')
+  }
+  for (const field of BUILDER_FORBIDDEN_FIELDS) {
+    if (form.some((part) => part.name === field)) {
+      throw aiError(400, 'invalid_request', `"${field}" is not accepted when publishing builder changes.`)
+    }
+  }
+  const turnstileToken = readFormField(form, 'cf-turnstile-response')
+
+  if (!tryAcquireAiOperation(userId)) {
+    throw aiError(409, 'workspace_busy', 'A workspace operation is already running.')
+  }
+  try {
+    const workspace = getAiWorkspace(userId)
+    if (!workspace || workspace.attached_slug !== slug) {
+      throw aiError(409, 'workspace_conflict', 'This workspace is not attached to that site. Attach it again.')
+    }
+    if (revision !== workspace.revision) {
+      throw aiError(409, 'workspace_conflict', 'The workspace changed since it was loaded.')
+    }
+
+    const target = requireAttachedTarget(event, userId, workspace)
+    if (target.row.entry_point !== target.baselineEntryPoint) {
+      throw aiError(
+        409,
+        'workspace_conflict',
+        'The live site changed since it was attached. Attach it again before publishing.'
+      )
+    }
+    if (workspace.current_generation === null) {
+      throw aiError(409, 'empty_workspace', 'The workspace has no files to publish.')
+    }
+
+    const zip = await buildWorkspaceZip(userId, workspace.current_generation)
+    const preferredEntryFile = target.baselineEntryPoint.slice(target.baselineEntryPoint.lastIndexOf('/') + 1)
+
+    let result: ReplaceUploadResult
+    try {
+      result = await replaceUploadFromContent(event, {
+        slug,
+        data: zip,
+        filename: 'ai-site.zip',
+        turnstileToken,
+        expectedEntryPoint: target.baselineEntryPoint,
+        expectedUploadId: target.uploadId,
+        preferredEntryFile,
+      })
+    } catch (error) {
+      if (!isUploadPublishFailure(error)) throw error
+      throw mapReplaceFailure(error)
+    }
+
+    // Refresh only the baseline. A failure here leaves the just-published site
+    // and the workspace intact; the next publication then reports 409 and the UI
+    // offers an explicit reattach instead of overwriting newer content.
+    if (!updateAiWorkspaceAttachedEntryPoint(userId, target.uploadId, result.entry_point)) {
+      console.error('[ai] attached baseline was not refreshed for', slug)
+    }
+    return result
+  } finally {
+    releaseAiOperation(userId)
+  }
 }
 
 export default defineEventHandler(async (event) => {
@@ -39,26 +160,19 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: 'Not found' })
   }
 
-  const row = findUploadBySlug(slug)
-  if (!row) {
-    throw createError({ statusCode: 404, message: 'Site not found' })
-  }
-  if (row.expires_at && new Date(row.expires_at) <= new Date()) {
-    throw createError({ statusCode: 404, message: 'Site has expired' })
-  }
-
+  // The upload rate limit runs before any body is buffered, so a rate-limited
+  // request never reads a file. Builder mode applies the same limit exactly once.
   const ip = getClientIP(event)
   const { allowed, retryAfter } = checkUploadRateLimit(ip)
   if (!allowed) {
-    const err = createError({
+    if (retryAfter) {
+      setResponseHeader(event, 'Retry-After', String(retryAfter))
+    }
+    throw createError({
       statusCode: 429,
       statusMessage: 'Too Many Requests',
       message: `Rate limit exceeded. Try again in ${retryAfter ?? 60} seconds.`,
     })
-    if (retryAfter) {
-      setResponseHeader(event, 'Retry-After', String(retryAfter))
-    }
-    throw err
   }
 
   const form = await readMultipartFormData(event)
@@ -66,99 +180,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'No file in request' })
   }
 
-  const ownerToken = readFormField(form, 'owner_token')
-  authorizeContentUpdate(event, row, ownerToken, hasValidApiToken(event))
-
-  // Fail closed before staging or switching anything: an unconfigured deployment
-  // must not publish a replacement it cannot return a canonical URL for.
-  const url = canonicalSiteUrl(slug)
-  if (!url) {
-    throw createError({
-      statusCode: 503,
-      message: `Hosted site origins are not configured on this server: ${getSiteHostConfig().reason ?? 'unknown reason'}`,
-    })
+  const revisionField = readFormField(form, AI_REVISION_FIELD)
+  if (revisionField !== '') {
+    return await runAiApi(event, () => publishAttachedWorkspace(event, slug, form, revisionField))
   }
 
-  const file = form.find((f) => f.name === 'file')
-  if (!file?.data) {
-    throw createError({ statusCode: 400, message: 'Missing file' })
-  }
-
-  if (!hasValidApiToken(event)) {
-    const turnstileToken = readFormField(form, 'cf-turnstile-response')
-    const turnstileOk = await verifyTurnstileToken(turnstileToken || undefined, ip)
-    if (!turnstileOk) {
-      throw createError({ statusCode: 400, message: 'Captcha verification failed. Please try again.' })
-    }
-  }
-
-  const filename = (file.filename || 'file').toLowerCase()
-  if (!isAcceptedUploadFilename(filename)) {
-    throw createError({ statusCode: 400, message: 'Only .html, .zip, or .md files are allowed' })
-  }
-
-  const data = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data as ArrayBuffer)
-  const config = useRuntimeConfig()
-  const userId = getUserIdFromEvent(event) ?? null
-  const user = userId ? findUserById(userId) : null
-  const maxBytes = resolveUploadMaxBytes({
-    userMaxBytes: user?.upload_max_bytes ?? null,
-    isApi: hasValidApiToken(event),
-    isZip: filename.endsWith('.zip'),
-    configMaxBytes: config.jolthost?.uploadMaxBytes ?? 25 * 1024 * 1024,
-  })
-  if (data.length > maxBytes) {
-    throw createError({
-      statusCode: 413,
-      message: `File too large. Maximum size is ${Math.round(maxBytes / 1024 / 1024)}MB.`,
-    })
-  }
-
-  // Stage the complete replacement outside the served asset root.
-  const stagingDir = createStagingDir()
-  let entryRel: string
-  try {
-    entryRel = await writeUploadContent(data, filename, stagingDir)
-  } catch (err) {
-    removeContentDir(stagingDir)
-    throw err
-  }
-
-  const uniqueId = randomUUID()
-  let finalDir: string
-  try {
-    finalDir = publishStagedDir(stagingDir, slug, uniqueId)
-  } catch {
-    removeContentDir(stagingDir)
-    throw createError({ statusCode: 500, message: 'Failed to store the replacement content.' })
-  }
-
-  const newEntryPoint = pathRelativeToStorage(path.join(finalDir, entryRel))
-
-  // The conditional update is the publication switch.
-  if (!updateEntryPointIfUnchanged(slug, row.entry_point, newEntryPoint)) {
-    removeContentDir(finalDir)
-    const current = findUploadBySlug(slug)
-    if (!current || (current.expires_at && new Date(current.expires_at) <= new Date())) {
-      throw createError({ statusCode: 404, message: 'Site is no longer available' })
-    }
-    throw createError({
-      statusCode: 409,
-      message: 'This site was updated by another request. Reload and try again.',
-    })
-  }
-
-  // Retire the former content for a bounded period, then prune abandoned files.
-  const formerDir = path.dirname(path.join(STORAGE, row.entry_point))
-  if (formerDir !== STORAGE && formerDir.startsWith(STORAGE + path.sep)) {
-    retireContentPath(formerDir)
-  }
-  pruneStaging()
-  pruneTrash()
-
-  return {
+  const file = form.find((part) => part.name === 'file' && typeof part.data === 'object')
+  const data = file?.data ? (Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data as ArrayBuffer)) : null
+  return await replaceUploadFromContent(event, {
     slug,
-    url,
-    entry_point: newEntryPoint,
-  }
+    data,
+    filename: file?.filename || 'file',
+    ownerToken: readFormField(form, 'owner_token'),
+    turnstileToken: readFormField(form, 'cf-turnstile-response'),
+  })
 })

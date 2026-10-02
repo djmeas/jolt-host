@@ -13,6 +13,7 @@ export default defineEventHandler((event) => {
     email: user.email,
     upload_max_bytes: user.upload_max_bytes,
     never_expire: user.never_expire,
+    ai_build_enabled: user.ai_build_enabled,
     created_at: user.created_at,
   }
 })

@@ -15,6 +15,7 @@
     "test:composables": "vitest run --config vitest.composables.config.ts"
   },
   "dependencies": {
+    "archiver": "^7.0.1",
     "better-sqlite3": "^11.6.0",
     "marked": "^17.0.5",
     "mime-types": "^2.1.35",
@@ -27,7 +28,6 @@
     "@nuxt/devtools": "latest",
     "@nuxt/test-utils": "^4.0.0",
     "@vue/test-utils": "^2.4.6",
-    "archiver": "^7.0.1",
     "happy-dom": "^20.8.3",
     "nitro-test-utils": "^0.11.2",
     "vitest": "^4.0.18"

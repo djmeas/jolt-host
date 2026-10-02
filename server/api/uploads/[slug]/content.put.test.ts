@@ -150,7 +150,6 @@ describe('PUT /api/uploads/[slug]/content handler', () => {
     })
     expect(result).not.toHaveProperty('owner_token')
     expect(mocks.writeUploadContent).toHaveBeenCalled()
-    expect(mocks.updateEntryPointIfUnchanged).toHaveBeenCalledWith('slug', 'slug/index.html', '.content/slug/u2/index.html')
     expect(mocks.retireContentPath).toHaveBeenCalledWith('/fake/storage/slug')
   })
 

@@ -1,30 +1,27 @@
 <script setup lang="ts">
+import type { StoredResult } from '~/composables/useResultStorage'
+
 useHead({ meta: [{ name: 'robots', content: 'noindex, nofollow' }] })
 
 const route = useRoute()
 const slug = computed(() => route.params.slug as string)
-const RESULT_BY_SLUG_PREFIX = 'jolthost-result-'
-
-type StoredResult = { url_with_unlock?: string; url?: string; owner_token?: string; expires_at?: string; title?: string }
 
 const storedResult = ref<StoredResult | null>(null)
 const { addSite } = useMySites()
 const { siteUrlFor } = useSiteUrl()
+const { readResult } = useResultStorage()
 
 onMounted(() => {
-  try {
-    const raw = sessionStorage.getItem(`${RESULT_BY_SLUG_PREFIX}${slug.value}`)
-    if (raw) {
-      storedResult.value = JSON.parse(raw) as StoredResult
-      const baseUrl = storedResult.value.url_with_unlock || storedResult.value.url || siteUrlFor(slug.value)
-      addSite({
-        siteUrl: baseUrl,
-        title: storedResult.value.title,
-        createdAt: new Date().toISOString(),
-        expiresAt: storedResult.value.expires_at || null,
-      })
-    }
-  } catch (_) {}
+  const stored = readResult(slug.value)
+  if (!stored) return
+  storedResult.value = stored
+  const baseUrl = stored.url_with_unlock || stored.url || siteUrlFor(slug.value)
+  addSite({
+    siteUrl: baseUrl,
+    title: stored.title,
+    createdAt: new Date().toISOString(),
+    expiresAt: stored.expires_at || null,
+  })
 })
 
 const url = computed(() => {

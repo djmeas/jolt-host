@@ -22,10 +22,20 @@ export default defineEventHandler((event) => {
     limit,
   })
 
+  const now = Date.now()
   return {
     items: items.map((u) => ({
-      ...u,
+      id: u.id,
+      slug: u.slug,
+      entry_point: u.entry_point,
+      created_at: u.created_at,
+      expires_at: u.expires_at,
+      has_password: u.has_password,
+      title: u.title,
+      data_enabled: u.data_enabled,
       url: canonicalSiteUrl(u.slug) ?? '',
+      // UI guidance only: the builder still authorizes every request itself.
+      ai_editable: u.user_id != null && (!u.expires_at || new Date(u.expires_at).getTime() > now),
     })),
     total,
     page: p,
